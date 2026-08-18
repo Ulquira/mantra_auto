@@ -1,11 +1,19 @@
 const express = require('express');
-const { processOrderById } = require('./mantra_service.cjs');
+const cron = require('node-cron');
+const { processOrderById, runCron } = require('./mantra_service.cjs');
 require('dotenv').config();
 
 const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
+const CRON_SCHEDULE = process.env.CRON_SCHEDULE || '*/5 * * * *'; // Cada 5 minutos por defecto
+
+// Programar tarea automatizada continua
+cron.schedule(CRON_SCHEDULE, async () => {
+  await runCron();
+});
+console.log(`⏰ Programador Cron activado con frecuencia: '${CRON_SCHEDULE}'`);
 
 // Endpoint Webhook para recibir notificaciones por evento/cambio de estado
 app.post('/webhook/estado-cambiado', async (req, res) => {
