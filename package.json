@@ -2,13 +2,15 @@
   "name": "api-mantra-whatsapp",
   "version": "1.0.0",
   "description": "Módulo de automatización y envío de mensajes de WhatsApp utilizando la API de Mantra.",
-  "main": "mantra_cron.cjs",
+  "main": "mantra_webhook.cjs",
   "scripts": {
-    "start": "node mantra_cron.cjs",
+    "start": "node mantra_webhook.cjs",
+    "cron": "node mantra_cron.cjs",
     "setup-test": "node setup_test_mantra.cjs"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
+    "express": "^5.2.1",
     "mysql2": "^3.9.2"
   }
 }
