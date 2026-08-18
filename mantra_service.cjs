@@ -204,10 +204,37 @@ async function runCron(filterMode = 'ALL') {
   }
 }
 
+async function runQueueCron() {
+  const conn = await getDbConnection();
+  try {
+    const [colaRows] = await conn.query('SELECT * FROM COLA_NOTIFICACIONES_MANTRA ORDER BY id ASC LIMIT 50');
+    if (colaRows.length === 0) return;
+
+    for (const item of colaRows) {
+      const ordenId = item.ordenId;
+      console.log(`[QUEUE] Procesando orden ${ordenId} de la cola...`);
+      
+      const result = await processOrderById(ordenId);
+      
+      if (result.success || result.message?.includes('notificada previamente')) {
+        await conn.query('DELETE FROM COLA_NOTIFICACIONES_MANTRA WHERE id = ?', [item.id]);
+        console.log(`[QUEUE] Orden ${ordenId} eliminada de la cola.`);
+      } else {
+        console.error(`[QUEUE ERROR] Fallo al procesar la orden ${ordenId} desde la cola.`);
+      }
+    }
+  } catch (err) {
+    console.error("❌ Error en QueueCron:", err.message);
+  } finally {
+    await conn.end();
+  }
+}
+
 module.exports = {
   getDbConnection,
   ensureLogTableExists,
   sendMantraNotification,
   processOrderById,
-  runCron
+  runCron,
+  runQueueCron
 };

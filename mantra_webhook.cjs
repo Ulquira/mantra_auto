@@ -2,30 +2,19 @@ process.env.TZ = 'America/Lima';
 
 const express = require('express');
 const cron = require('node-cron');
-const { processOrderById, runCron } = require('./mantra_service.cjs');
+const { processOrderById, runQueueCron } = require('./mantra_service.cjs');
 require('dotenv').config();
 
 const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
-const TIMEZONE = 'America/Lima';
 
-// 1. Cron de las 8:00 PM (20:00 hora Perú) -> Envía órdenes agendadas para el DÍA SIGUIENTE
-cron.schedule('0 20 * * *', async () => {
-  console.log("⏰ [CRON 8:00 PM] Disparando envío de WhatsApps para las órdenes del DÍA SIGUIENTE...");
-  await runCron('NEXT_DAY');
-}, { timezone: TIMEZONE });
-
-// 2. Cron cada 15 minutos de 7:00 AM a 6:00 PM (18:00 hora Perú) -> Envía órdenes agendadas para el MISMO DÍA
-cron.schedule('*/15 7-18 * * *', async () => {
-  console.log("⏰ [CRON 15 MIN] Escaneo diurno de órdenes del MISMO DÍA...");
-  await runCron('SAME_DAY');
-}, { timezone: TIMEZONE });
-
-console.log(`⏰ Programador Cron configurado (Zona Horaria: ${TIMEZONE}):`);
-console.log(`   - Diariamente a las 20:00: Órdenes del DÍA SIGUIENTE`);
-console.log(`   - Cada 15 min (07:00 - 18:00): Órdenes del MISMO DÍA`);
+// Nuevo Cron basado en Cola (se ejecuta cada 30 segundos)
+cron.schedule('*/30 * * * * *', async () => {
+  await runQueueCron();
+});
+console.log(`⏰ Cron [Cola Eventos] activado. Escaneando la cola cada 30 segundos...`);
 
 // Endpoint Webhook para recibir notificaciones por evento/cambio de estado
 app.post('/webhook/estado-cambiado', async (req, res) => {
