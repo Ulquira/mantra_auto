@@ -51,12 +51,17 @@ app.post('/webhook/estado-cambiado', async (req, res) => {
   }
 });
 
+// Root route para probes de inicio de Azure App Service
+app.get('/', (req, res) => {
+  res.status(200).send('API Mantra WhatsApp Webhook is Running');
+});
+
 // Healthcheck
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'UP', timestamp: new Date().toISOString() });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor Webhook corriendo en http://localhost:${PORT}`);
-  console.log(`📌 Endpoint para cambio de estado: POST http://localhost:${PORT}/webhook/estado-cambiado`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Servidor Webhook corriendo en el puerto ${PORT}`);
+  console.log(`📌 Endpoint para cambio de estado: POST /webhook/estado-cambiado`);
 });
