@@ -1,3 +1,5 @@
+process.env.TZ = 'America/Lima';
+
 const express = require('express');
 const cron = require('node-cron');
 const { processOrderById, runCron } = require('./mantra_service.cjs');
@@ -7,13 +9,23 @@ const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
-const CRON_SCHEDULE = process.env.CRON_SCHEDULE || '*/5 * * * *'; // Cada 5 minutos por defecto
+const TIMEZONE = 'America/Lima';
 
-// Programar tarea automatizada continua
-cron.schedule(CRON_SCHEDULE, async () => {
-  await runCron();
-});
-console.log(`⏰ Programador Cron activado con frecuencia: '${CRON_SCHEDULE}'`);
+// 1. Cron de las 8:00 PM (20:00 hora Perú) -> Envía órdenes agendadas para el DÍA SIGUIENTE
+cron.schedule('0 20 * * *', async () => {
+  console.log("⏰ [CRON 8:00 PM] Disparando envío de WhatsApps para las órdenes del DÍA SIGUIENTE...");
+  await runCron('NEXT_DAY');
+}, { timezone: TIMEZONE });
+
+// 2. Cron cada 15 minutos de 7:00 AM a 6:00 PM (18:00 hora Perú) -> Envía órdenes agendadas para el MISMO DÍA
+cron.schedule('*/15 7-18 * * *', async () => {
+  console.log("⏰ [CRON 15 MIN] Escaneo diurno de órdenes del MISMO DÍA...");
+  await runCron('SAME_DAY');
+}, { timezone: TIMEZONE });
+
+console.log(`⏰ Programador Cron configurado (Zona Horaria: ${TIMEZONE}):`);
+console.log(`   - Diariamente a las 20:00: Órdenes del DÍA SIGUIENTE`);
+console.log(`   - Cada 15 min (07:00 - 18:00): Órdenes del MISMO DÍA`);
 
 // Endpoint Webhook para recibir notificaciones por evento/cambio de estado
 app.post('/webhook/estado-cambiado', async (req, res) => {

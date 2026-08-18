@@ -151,26 +151,36 @@ async function processOrderById(ordenId) {
   }
 }
 
-async function runCron() {
-  console.log(`\n[CRON ${new Date().toISOString()}] Ejecutando escaneo periódico de órdenes 'Agendada'...`);
+async function runCron(filterMode = 'ALL') {
+  const modeLabel = filterMode === 'NEXT_DAY' ? 'DÍA SIGUIENTE' : filterMode === 'SAME_DAY' ? 'MISMO DÍA' : 'TODOS';
+  console.log(`\n[CRON ${new Date().toISOString()}] Ejecutando escaneo periódico (${modeLabel})...`);
   
   const conn = await getDbConnection();
 
   try {
     await ensureLogTableExists(conn);
 
-    const [rows] = await conn.query(`
+    let dateCondition = "";
+    if (filterMode === 'NEXT_DAY') {
+      dateCondition = " AND DATE(t.`F.Soli`) = DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
+    } else if (filterMode === 'SAME_DAY') {
+      dateCondition = " AND DATE(t.`F.Soli`) = CURDATE()";
+    }
+
+    const queryStr = `
       SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time
       FROM Testmantra t
       LEFT JOIN LOG_NOTIFICACIONES_WSP l
         ON t.OrdenId = l.OrdenId AND l.EstadoNotificado = t.Estado
-      WHERE t.Estado = 'Agendada' AND l.id IS NULL
-    `);
+      WHERE t.Estado = 'Agendada' AND l.id IS NULL ${dateCondition}
+    `;
+
+    const [rows] = await conn.query(queryStr);
 
     if (rows.length === 0) {
-      console.log("✔ No hay órdenes nuevas en estado 'Agendada' pendientes de notificar.");
+      console.log(`✔ No hay órdenes pendientes en estado 'Agendada' para la condición [${modeLabel}].`);
     } else {
-      console.log(`Encontradas ${rows.length} órden(es) pendientes de notificación.`);
+      console.log(`Encontradas ${rows.length} órden(es) pendientes de notificación [${modeLabel}].`);
       
       for (const row of rows) {
         const result = await sendMantraNotification(row);

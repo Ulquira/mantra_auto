@@ -13,10 +13,10 @@ async function run() {
 
     console.log('Actualizando tabla Testmantra para la prueba...');
     
-    // 1. Cambiamos el estado a "Agendada" y ponemos tu número de teléfono (935434175)
+    // 1. Cambiamos el estado a "Agendada", fecha de solicitud a hoy y teléfono 935434175
     await conn.query(`
       UPDATE Testmantra 
-      SET Estado = 'Agendada', TeleMovilNume = '935434175'
+      SET Estado = 'Agendada', TeleMovilNume = '935434175', \`F.Soli\` = NOW()
     `);
 
     // 2. Limpiamos cualquier log de pruebas anteriores
