@@ -3,7 +3,7 @@ require('dotenv').config();
 
 const MANTRA_GROUP_ID = process.env.MANTRA_GROUP_ID || "685dc70e53dd0ac2492c69ca";
 const MANTRA_API_KEY = process.env.MANTRA_API_KEY || "3d0d59f1-f3ea-47be-b5b0-d7ffca33817d";
-const MANTRA_TEMPLATE_ID = process.env.MANTRA_TEMPLATE_ID || "6a833a583fdba38c5c910682";
+const MANTRA_TEMPLATE_ID = process.env.MANTRA_TEMPLATE_ID || "6a7a457736ef53a657fc03ed";
 
 const URL_CREATE_CONTACT = "https://wbpback2pro2.mantra.chat/contacts/new";
 const URL_SEND_TEMPLATE = "https://wbpback2pro2.mantra.chat/contacts/send";
