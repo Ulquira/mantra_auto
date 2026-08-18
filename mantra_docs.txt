@@ -1,0 +1,704 @@
+Endpoints para acceso externo 
+API REST 
+Historial de cambios 
+Autor Fecha Versión Descripción 
+David 
+Cardenas 10/08/2021 1.0 Especificación endpoints de registro/actualización contacto 
+y envío plantilla a contacto. 
+David 
+Cardenas 01/11/2022 1.1 
+Especificación de nuevo endpoint para crear etiqueta y 
+cambios en endpoint de nuevo contacto para asociar 
+contacto con etiqueta 
+David 
+Cardenas 07/12/2022 1.1.1 Mejoras al response endpoint crear etiqueta para indicar si 
+fue creada ó encontrada (mismo nombre) 
+David 
+Cardenas 08/04/2024 1.2 
+Mejoras al endpoint de consulta contacto por phone para 
+que devuelva datos adicionales de etiquetas, asignación y 
+fechas 
+Fabio 
+Coronado 10/07/2024 1.3 Añadido el endpoint para consultar el reporte de 
+bots/flows. 
+David 
+Cardenas 28/08/2024 1.4 Cambios en endpoint de crear/asignar contacto para 
+asociar contacto con etiqueta 
+Jhonny 
+Lorenzo 25/06/2025 1.5 Añadido el endpoint para consultar historial de mensajes 
+entre contacto y grupo. 
+Jhonny 
+Lorenzo 26/11/2025 1.6 Añadido el endpoint para consultar reporte de plantillas. 
+ 
+ 
+ 
+ 
+ 
+Gestión de contactos 
+Creación y Actualización de contacto 
+Para crear o actualizar un contacto dentro de un grupo se utiliza su número telefónico (campos 
+countryCode y phone) para verificar si está registrado o no: 
+• Si no hay un contacto asociado con el número telefónico especificado entonces se crea un 
+nuevo contacto con los datos 
+• Si ya existe un contacto asociado con el número telefónico especificado, se procede a 
+actualizar ese contacto con los nuevos datos 
+Request 
+URL https://wbpback.mantra.chat/contacts/new 
+HTTP Method POST 
+Headers Content-Type: application/json 
+Parámetros: 
+Nombre Tipo Descripción 
+groupId string Dato de autentificación de cuenta Mantra 
+apiKey string Dato de autentificación de cuenta Mantra 
+data object Objeto que contiene datos del contacto a crear o actualizar 
+data.name string Nombre completo 
+data.phone string Número telefónico que se usará para interactuar por Whatsapp 
+No debe incluir el código de país 
+data.countryCode string Código de país del número telefónico 
+data.email string Correo electrónico (opcional) 
+data.custom_1 string 
+Sirve para guardar cualquier dato que luego puede ser usado en 
+plantillas 
+Son 10 campos disponibles desde custom_1 a custom_10 
+(opcionales) 
+data.tagIds array 
+ID de la etiqueta o etiquetas que se asociarán al contacto 
+(opcional) 
+Si el contacto ya existe este se asocia con las etiquetas 
+especificadas sin alterar las que ya tenía asociadas 
+El ID de la etiqueta se obtiene al crear la etiqueta usando el 
+Endpoint de Creación Etiqueta 
+Request body: 
+{ 
+  "groupId":"GROUP_ID", 
+  "apiKey":"GROUP_API_KEY", 
+  "data": { 
+    "name": "Contact 1", 
+    "phone": "911000001", 
+    "countryCode": "51", 
+    "email": "contact1@mantra.chat", 
+    "custom_1": "Dato personalizado 1", 
+    "tagIds": ["TAG2_ID","TAG3_ID"] 
+  } 
+}  
+Response 
+Response body: 
+{ 
+  "name": "Contact 1", 
+  "phone": "911000011", 
+  "email": "contact1@mantra.chat", 
+  "custom_1": "Dato personalizado 1", 
+  "tagIdList": ["TAG1_ID","TAG2_ID","TAG3_ID"], 
+  "resultOp": "created" 
+} 
+Status codes: 
+• 201 Created, si el contacto fue creado 
+• 200 OK, si el contacto fue actualizado 
+• 400 Bad Request, si los parámetros enviados están incorrectos o faltan 
+• 403 Forbidden, si las credenciales (campos groupId ó apiKey) son incorrectas 
+• 500 Internal Server Error, si hubo algún error interno durante la ejecución de la 
+operación 
+ 
+ 
+ 
+Asociación de usuario y contacto 
+Para asociar un contacto a un usuario, utilizando el e-mail del usuario (campo userEmail) y 
+número telefónico del contacto (campos countryCode y phone), considerando lo siguiente 
+dentro de un grupo: 
+• Si ya está registrado un contacto con el número telefónico especificado, se procede a 
+actualizar ese contacto con los nuevos datos 
+• Si además ese contacto ya estaba asociado a otro usuario, se procede a asociar con el 
+usuario correspondiente al e-mail especificado 
+Request 
+URL  https://wbpback.mantra.chat/contacts/newbyuser 
+HTTP Method POST  
+ Headers Content-Type: application/json 
+Parámetros: 
+Nombre Tipo Descripción 
+groupId string Dato de autentificación de cuenta Mantra 
+apiKey string Dato de autentificación de cuenta Mantra 
+userEmail string E-mail de agente que está registrado en la cuenta Mantra y con el 
+cual se asociará el contacto 
+data object Objeto que contiene datos del contacto a crear o actualizar 
+data.name string Nombre completo 
+data.phone string Número telefónico que se usará para interactuar por Whatsapp 
+No debe incluir el código de país 
+data.countryCode string Código de país del número telefónico 
+data.email string Correo electrónico (opcional) 
+data.custom_1 string 
+Sirve para guardar cualquier dato que luego puede ser usado en 
+plantillas 
+Son 10 campos disponibles desde custom_1 a custom_10 
+(opcionales) 
+data.tagIds array 
+ID de la etiqueta o etiquetas que se asociarán al contacto 
+(opcional) 
+Si el contacto ya existe este se asocia con las etiquetas 
+especificadas sin alterar las que ya tenía asociadas 
+El ID de la etiqueta se obtiene al crear la etiqueta usando el 
+Endpoint de Creación Etiqueta 
+createdByBot string Parte final del webhook si el endpoint es usado por un bot 
+Request body: 
+{ 
+  "groupId":"GROUP_ID", 
+  "apiKey":"GROUP_API_KEY", 
+  "userEmail":"publisher@aryadev.pe", 
+  "data": { 
+    "name": "Contact 1", 
+    "phone": "911000001", 
+    "countryCode": "51", 
+    "email": "contact1@mantra.chat", 
+    "custom_1": "Dato personalizado", 
+    "tagIds": ["TAG2_ID","TAG3_ID"] 
+  }, 
+  "createdByBot": "BOT_ID" 
+}  
+Response 
+Response body: 
+{ 
+  "name": "Contact 1", 
+  "phone": "911000001", 
+  "countryCode": "51", 
+  "email": "contact1@mantra.chat", 
+  "custom_1": "Dato personalizado", 
+  "tagIdList": ["TAG1_ID","TAG2_ID","TAG3_ID"], 
+  "resultOp": "created" // "updated" - si el contacto ya estaba registrado 
+} 
+Status codes: 
+• 201 Created, si el contacto fue creado 
+• 200 OK, si el contacto fue actualizado 
+• 400 Bad Request, si los parámetros enviados están incorrectos o faltan 
+• 403 Forbidden, si las credenciales (campos groupId ó apiKey) son incorrectas 
+• 409 Conflict, cuando el usuario correspondiente al campo userEmail no es agente 
+• 500 Internal Server Error, si hubo algún error interno durante la ejecución de la 
+operación 
+Consulta de contacto por phone 
+Para consultar el registro de contacto correspondiente al número telefónico especificado (campos 
+countryCode y phone). 
+Request 
+URL https://wbpback.mantra.chat/contacts/byphone 
+HTTP Method POST 
+Headers Content-Type: application/json 
+Parámetros: 
+Nombre Tipo Descripción 
+groupId string Dato de autentificación de cuenta Mantra 
+apiKey string Dato de autentificación de cuenta Mantra 
+phone string Número telefónico de contacto a consultar si existe en cuenta Mantra 
+No debe incluir código de país 
+countryCode string Código de país del número telefónico 
+Request body: 
+{ 
+  "groupId": "GROUP_ID", 
+  "apiKey": "GROUP_API_KEY", 
+  "phone": "911000001", 
+  "countryCode": "51" 
+}  
+Response 
+Response body: 
+{ 
+  "name": "Contact 1", 
+  "phone": "911000001", 
+  "countryCode": "51", 
+  "email": "contact1@personal.com", 
+  "custom_1": "dato personalizado", 
+  "agent": "agente@empresa.com",  
+  "agentAssignmentDate": "2024-04-08T17:00:00Z",  
+  "contactTags": ["ETIQUETA 1","ETIQUETA 2"],  
+  "chatStatusTags": ["ESTADO 1","ESTADO 2"],  
+  "createdAt": "2024-04-01T14:00:00Z",  
+  "updatedAt": "2024-04-08T17:00:00Z" 
+} 
+Status codes: 
+• 200 OK, devuelve los datos de contacto asociados al número o nada en caso no haya 
+contacto 
+• 400 Bad Request, si los parámetros enviados están incorrectos o faltan 
+• 403 Forbidden, si las credenciales (campos groupId ó apiKey) son incorrectas 
+• 404 Not Found, si no hay registro de contacto asociado al número telefónico 
+especificado 
+• 500 Internal Server Error, si hubo algún error interno durante la ejecución de la 
+operación 
+Creación de Etiqueta 
+Para crear una etiqueta dentro de un grupo se verifica si el nombre (campo name) ya está 
+registrado: 
+• Si no existe una etiqueta con el nombre entonces se crea y se devuelve su ID con el 
+estado created 
+• Si ya existe una etiqueta con el nombre entonces sólo se devuelve su ID con estado found 
+Request 
+URL https://wbpback.mantra.chat/contacts/new-tag 
+HTTP Method POST 
+Headers Content-Type: application/json 
+Request body: 
+{ 
+  "groupId":"GROUP_ID", 
+  "apiKey":"GROUP_API_KEY", 
+  "name":"Etiqueta de prueba" 
+}  
+Response 
+Response body: 
+{ 
+  "id": "TAG_ID", 
+  "status": "created" // "found" - si la etiqueta ya existía 
+} 
+Status codes: 
+• 200 OK, si la etiqueta fue creada o si ya existía una etiqueta con el nombre 
+• 400 Bad Request, si los parámetros enviados están incorrectos o faltan 
+• 500 Internal Server Error, si hubo algún error interno durante la ejecución de la 
+operación 
+Envío de plantillas 
+Envío de una plantilla a un contacto 
+Para enviar una plantilla a un contacto, se necesita especificar el ID de la plantilla (atributo 
+templateId) y el número telefónico del contacto (campos countryCode y phone). 
+Request 
+URL https://wbpback.mantra.chat/contacts/send 
+HTTP Method POST 
+Headers Content-Type: application/json 
+Parámetros: 
+Nombre Tipo Descripción 
+groupId string Dato de autentificación de cuenta Mantra 
+apiKey string Dato de autentificación de cuenta Mantra 
+templateId string ID de plantilla registrada en cuenta Mantra 
+phone string Número telefónico de contacto registrado en cuenta Mantra 
+No debe incluir código de país 
+countryCode string Código de país del número telefónico 
+sendByBot string Parte final del webhook si el endpoint es usado por un bot 
+Request body: 
+{ 
+  "groupId": "GROUP_ID", 
+  "apiKey": "GROUP_API_KEY", 
+  "templateId": "TEMPLATE_ID",   
+  "phone": "911000001", 
+  "countryCode": "51" 
+  "sendByBot": "BOT_ID", 
+} 
+Response 
+Response body: 
+{ 
+  "ok": true 
+} 
+Status codes: 
+• 201 Created, si la orden de enviar la plantilla fue realizada con éxito 
+• 400 Bad Request, si los parámetros enviados están incorrectos o faltan 
+• 403 Forbidden, si las credenciales (campos groupId ó apiKey) son incorrectas 
+• 404 Not Found, si no hay registro de contacto asociado al número telefónico o no hay 
+registro de plantilla asociada al ID de plantilla 
+• 406 Not Acceptable, si la operación no puede realizarse (ejemplo cuota de envíos de 
+plantilla fue excedida) 
+• 500 Internal Server Error, si hubo algún error interno durante la ejecución de la 
+operación 
+Bots 
+Consultar reporte de bots/flows 
+Para consultar los datos guardados del bot/flow pertenecientes a un grupo especificado. 
+Request 
+URL https://wbpback.mantra.chat/bots/data-report 
+HTTP Method POST 
+Headers Content-Type: application/json 
+Parámetros: 
+Nombre Tipo Descripción 
+groupId string Dato de autentificación de cuenta Mantra 
+apiKey string Dato de autentificación de cuenta Mantra 
+botId string ID de bot o flow registrado en el reporte de una cuenta Mantra 
+limit string Número de registros obtenidos por página. Acepta valores desde 10 a 1000. 
+page string Número de página. Acepta valores mayores que 1. 
+fromDate string Fecha desde donde se obtendrán los datos (opcional) . Debe ser de la forma 
+“YYYY-MM-DD“ 
+toDate string Fecha hasta donde se obtendrán los datos (opcional) . Debe ser de la forma 
+“YYYY-MM-DD“ 
+Request body: 
+{ 
+  "groupId": "GROUP_ID", 
+  "apiKey": "GROUP_API_KEY", 
+  "botId": "BOT_ID/FLOW_ID",   
+  "limit": "10", 
+  "page": "1" 
+  "fromDate": "2023-05-05", 
+  "toDate": "2024-03-15" 
+} 
+Response 
+Response body: 
+{ 
+ "total": 1, 
+ "page": 1, 
+ "totalPages": 1, 
+ "data": [ 
+  { 
+   "Nombre": "Test Mantra", 
+   "Celular": "+51999999999", 
+   "Fecha": "2024-7-9", 
+   "Hora": "6:42:38", 
+   "Estado": "status_50", 
+   "Proyecto": "Test Project" 
+  } 
+ ] 
+} 
+Status codes: 
+• 200 OK, si los datos se obtuvieron con éxito. En el caso de que no haya datos disponibles 
+se retorna un array vacío. 
+• 400 Bad Request, si los parámetros enviados están incorrectos o faltan 
+• 401 Unauthorized, si la apiKey no es válida. 
+• 404 Not Found, si no hay registro del grupo. 
+• 500 Internal Server Error, si hubo algún error interno durante la ejecución de la 
+operación 
+ 
+Historial de mensajes de contacto 
+Consultar historial de mensajes de chat 
+Para obtener el historial completo de mensajes entre un contacto específico y los agentes 
+asignados. 
+Request 
+URL https://wbpback.mantra.chat/contacts/chats/historial 
+HTTP Method POST 
+Headers 
+Authorization: Bearer <apiKey> 
+GroupId: <groupId> 
+Content-Type: application/json 
+Parámetros: 
+Nombre Tipo Descripción 
+countryCode string Código de país del número de teléfono 
+phone string Número de teléfono sin código de país 
+page number Número de página. Acepta valores mayores o iguales a 1. Valor por 
+defecto: 1 
+limit number Número de registros por página. Acepta valores desde 1 a 100. Valor 
+por defecto: 50 
+Request body: 
+{ 
+    "countryCode": "56", 
+    "phone": "987987987",  
+    "page": 1, 
+    "limit": 10 
+} 
+Response 
+Response body: 
+{ 
+    "data": [ 
+        ..., 
+        { 
+            "agent": { 
+                "name": "John Doe", 
+                "email": "john.doe@acme.com", 
+                "assignedAt": "2025-01-11T13:22:47.574Z", 
+                "assignedBy": "SOURCE_CHATBOT", 
+                "assignedByUserName": "", 
+                "assignedByBotId": "{{BOT_ID}}}", 
+                "unassignedAt": "", 
+                "unassignedBy": "", 
+                "unassignedByUserName": "" 
+            }, 
+            "content": { 
+                "type": "text", 
+                "text": "¡Hola! Quiero cotizar...", 
+                "media": "" 
+            }, 
+            "sender": "contact", 
+            "status": "received", 
+            "createdAt": "2025-01-11T13:21:52.664Z", 
+            "updatedAt": "2025-01-11T13:21:52.664Z", 
+            "sentByUser": { 
+                "name": "John Doe", 
+                "email": "john.doe@acme.com", 
+                "type": "publisher" 
+            } 
+        }, 
+        ...         
+    ], 
+    "total": 35, 
+    "totalPages": 4, 
+    "page": 1, 
+    "limit": 10 
+} 
+Status codes: 
+• 200 OK, si los datos se obtuvieron con éxito. 
+• 400 Bad Request, si los parámetros limit (1-100) y page (≥1) no son números válidos 
+• 401 Unauthorized, si falta el header Authorization, falta el header GroupId, o las 
+credenciales son incorrectas 
+• 404 Not Found, si no se encuentra el contacto especificado o no se encontraron 
+mensajes para este contacto 
+• 500 Internal Server Error, si hubo algún error interno durante la ejecución de la 
+operación 
+Tipos de mensaje (content.type): 
+• text - Mensaje de texto simple 
+• quick_reply - Mensaje con botones de respuesta rápida 
+• button_reply - Respuesta de botón seleccionado 
+• media - Mensaje con archivo multimedia 
+Tipos de remitente (sender): 
+• contact - Mensaje enviado por el cliente 
+• group - Mensaje enviado por agente/empresa 
+Estados de mensaje (status): 
+• received - Mensaje recibido 
+• read - Mensaje leído 
+• delivered - Mensaje entregado 
+ 
+ 
+Reporte de mensajes de plantilla (Externo) 
+Consultar reporte de mensajes de plantilla con paginación 
+Para obtener el reporte paginado de mensajes enviados desde una plantilla específica en un rango 
+de fechas. 
+Request 
+URL https://wbpback.mantra.chat/report/template/messages/ext 
+HTTP Method POST 
+Headers 
+Authorization: Bearer <apiKey> 
+GroupId: <groupId> 
+Content-Type: application/json 
+Parámetros: 
+Nombre Tipo Descripción 
+templateId string ID de la plantilla de mensaje 
+fromDate string Fecha de inicio del rango (formato: YYYY-MM-DD) 
+toDate string Fecha de fin del rango (formato: YYYY-MM-DD) 
+page number Número de página. Acepta valores mayores o iguales a 1. Valor por 
+defecto: 1 
+limit number Número de registros por página. Acepta valores desde 1 a 100. Valor 
+por defecto: 1 
+ 
+ 
+Request body: 
+  { 
+      "templateId": "6745abc123def456789", 
+      "fromDate": "2024-01-01", 
+      "toDate": "2024-03-15", 
+      "page": 1, 
+      "limit": 10 
+  } 
+Response 
+Response body: 
+  { 
+      "total": 150, 
+      "page": 1, 
+      "totalPages": 15, 
+      "data": [ 
+          { 
+              "_id": "681b866e408ee12800d6ed3c", 
+              "name": "Tomas Bañales", 
+              "phone": "978890205", 
+              "countryCode": "56", 
+              "createdAt": "2025-05-07T16:12:30.656Z", 
+              "custom_1": "3881", 
+              "custom_2": "SCL", 
+              "custom_3": "AEP", 
+              "custom_4": "motivos operacionales", 
+              "custom_5": "R22N2Y", 
+              "custom_6": "1. Cambio de fecha sin costo", 
+              "custom_7": "2. Devolución en Gift Card", 
+              "custom_8": "3. Devolución medio de pago original", 
+              "custom_9": "P", 
+              "custom_10": "2025-11-24", 
+              "email": "tomas.banales@test.com", 
+              "userTagId": "cb0e44dc-98b1-46ef-b723-8acf1b886b04", 
+              "msgSentAt": "2025-11-18T13:40:08.968Z", 
+              "vendorId": "bdfb86d6-65e9-40eb-a8a1-7a2700222ef6", 
+              "msgStatus": "delivered", 
+              "chatStatus": "Pendiente", 
+              "agentName": "", 
+              "sentBy": "" 
+          } 
+      ] 
+  } 
+ 
+ 
+ 
+Status codes: 
+Código Descripción 
+200 OK Los datos se obtuvieron con éxito 
+400 Bad Request Si faltan parámetros requeridos (templateId, fromDate, toDate) o tienen 
+formato inválido 
+401 Unauthorized Si falta el header Authorization, falta el header GroupId, o las 
+credenciales son incorrecta 
+500 Internal Server 
+Error Si hubo algún error interno durante la ejecución de la operación 
+Campos del contacto en data: 
+Campo Tipo Descripción 
+_id string ID único del contacto 
+name string Nombre del contacto 
+phone string Número de teléfono 
+countryCode string Código de país 
+createdAt string Fecha de creación del contacto (ISO 8601) 
+custom_1 a custom_10 string Campos personalizados del contacto o de la plantilla 
+email string Correo electrónico del contacto 
+userTagId string ID del tag de usuario asignado 
+msgSentAt string Fecha y hora de envío del mensaje (ISO 8601) 
+vendorId string ID del proveedor/vendor del mensaje 
+msgStatus string Estado del mensaje 
+chatStatus string Estado del chat 
+agentName string Nombre del agente asignado 
+sentBy string Nombre de quien envió el mensaje 
+errorCode number Código de error (solo presente en mensajes fallidos 
+ 
+ 
+Estados de mensaje (msgStatus): 
+Estado Descripción 
+delivered Mensaje entregado 
+read Mensaje leído 
+sent Mensaje enviado 
+failed Mensaje fallido 
+submitted Mensaje en cola de envío 
+enqueued Mensaje encolado 
+Estados de chat (chatStatus): 
+Estado Descripción 
+Pendiente Sin respuesta del contacto o sin gestión 
+En 
+proceso El grupo/agente ha respondido al contacto 
+Éxito El contacto tiene un estado de éxito configurado (o el label personalizado del 
+grupo 
+ 
+Para interacción con contactos 
+Enviar un mensaje tipo documento + Botonera de 3 Opciones + Mensaje: 
+Request 
+URL https://wbpback.mantra.chat/messages/external 
+HTTP Method POST 
+Headers 
+Content-Type: application/json 
+Authorization: GROUP_API_KEY 
+{ 
+"contactId": "",//Identificador del contacto 
+"content": { 
+"type": "quick_reply",//tipo de mensaje 
+"text": "Esto es una prueba",//texto que se vera en el mensaje 
+"options": [//Opciones que se mostrarán en el mensaje de 1 a 3 
+"OPCION A", 
+"OPCION B", 
+"OPCION C" 
+], 
+"contentType": "file", 
+"contentMedia": "https://static.mantra.chat/grupo/nombre.pdf",//Link url de 
+la nube de Mantra 
+"filename": "Nombre Archivo.pdf"//Como se mostrará al contacto el archivo 
+} 
+} 
+Enviar un mensaje tipo Lista con Descripción: 
+Opciones: Hasta 24 caracteres (Emojis valen 4 caracteres) 
+Descripción: Hasta 72 caracteres  
+Request 
+URL https://wbpback.mantra.chat/messages/external 
+HTTP Method POST 
+Headers 
+Content-Type: application/json 
+Authorization: GROUP_API_KEY 
+{ 
+"contactId": "", 
+"content": { 
+"type": "list",//tipo del mensaje 
+"title":"",//Título del mensaje (sale como un encabezado en negrita en la 
+parte superior del mensaje) 
+"text":"Mensaje prueba",//Contenido del mensaje 
+//Lista de Opciones con su respectiva descripción 
+"options": [ {"title":"Opcion A","description":"Esta es la Opción 
+A"},{"title":"Opción B","description":"Esta es la Opción B"}] 
+ } 
+} 
+Enviar un mensaje tipo Lista sin Descripción: 
+Request 
+URL https://wbpback.mantra.chat/messages/external 
+HTTP Method POST 
+Headers 
+Content-Type: application/json 
+Authorization: GROUP_API_KEY 
+{ 
+"contactId": "", 
+"content": { 
+"type": "list", 
+"title":"Título Prueba", 
+"text":"Excelente! En qué curso estás interesado(a)?", 
+"options": [ "A","B","C","D","E"] 
+ } 
+} 
+Enviar un mensaje Imagen + Botonera 3 Opciones + Mensaje: 
+Request 
+URL https://wbpback.mantra.chat/messages/external 
+HTTP Method POST 
+Headers 
+Content-Type: application/json 
+Authorization: GROUP_API_KEY 
+{ 
+"contactId": "", 
+"content": { 
+    "type": "quick_reply", 
+    "text": "Esto es una prueba", 
+    "options": [ 
+      "si", 
+      "tal vez", 
+      "no" 
+    ], 
+    "contentType": "image",//Tipo de mensaje 
+    "contentMedia": "https://static.mantra.chat/grupo/image.jpeg"//Url de la 
+nube 
+  } 
+} 
+Enviar un mensaje Video+ Botonera 3 Opciones + Mensaje: 
+Request 
+URL https://wbpback.mantra.chat/messages/external 
+HTTP Method POST 
+Headers 
+Content-Type: application/json 
+Authorization: GROUP_API_KEY 
+{ 
+"contactId": "", 
+"content": { 
+    "type": "quick_reply", 
+    "text": "Prueba de Mensaje", 
+    "options": [//Opciones hasta 3 
+      "Agendar visita", 
+      "Deseo que me llamen" 
+    ], 
+    "contentType": "video",//Tipo de mensaje 
+    "contentMedia": "https://static.mantra.chat/grupo/VIDEO.mp4"//url de la 
+nube 
+  } 
+} 
+Enviar un mensaje Imagen + Mensaje: 
+Request 
+URL https://wbpback.mantra.chat/messages/external 
+HTTP Method POST 
+Headers 
+Content-Type: application/json 
+Authorization: GROUP_API_KEY 
+{ 
+"contactId": "", 
+"content": { 
+    "type": "image",//Tipo Mensaje 
+    "text": "Mensaje Prueba",//Mensaje que irá acompañado de la imagen 
+    "media": "https://static.mantra.chat/grupo/image.jpeg" 
+  }, 
+"sentByBot":"" 
+} 
+Enviar un mensaje Con 3 Opciones Botonera+ Mensaje: 
+Opción: Máximo 24 caracteres 
+Request 
+URL https://wbpback.mantra.chat/messages/external 
+HTTP Method POST 
+Headers 
+Content-Type: application/json 
+Authorization: GROUP_API_KEY 
+{ 
+"contactId": "", 
+  "content": { 
+    "type":"quick_reply",//Tipo 
+    "text":"¡Hola!",//Contenido 
+    "contentType":"text", 
+    "options":["Básico","Intermedio","Avanzado"]//3 opciones máximo 
+ } 
+} 
+Enviar un mensaje solo texto: 
+Request 
+URL https://wbpback.mantra.chat/messages/external 
+HTTP Method POST 
+Headers 
+Content-Type: application/json 
+Authorization: GROUP_API_KEY 
+{ 
+"contactId": "", 
+"content": { 
+"type": "text", 
+"text": "Mensaje Contenido" 
+} 
+} 
+Enviar una plantilla: 
+Request 
+URL https://wbpback.mantra.chat/contacts/send 
+HTTP Method POST 
+Headers 
+Content-Type: application/json 
+Authorization: GROUP_API_KEY 
+{ 
+"groupId":"", 
+"apiKey":"", 
+"templateId":"",//ID De la Plantilla 
+"phone":"" 
+} 
