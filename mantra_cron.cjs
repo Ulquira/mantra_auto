@@ -91,4 +91,9 @@ async function runCron() {
   }
 }
 
-runCron();
+module.exports = { runCron };
+
+// Permitir ejecutarlo directamente desde la terminal
+if (require.main === module) {
+  runCron();
+}

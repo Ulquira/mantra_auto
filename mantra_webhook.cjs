@@ -3,6 +3,7 @@ process.env.TZ = 'America/Lima';
 const express = require('express');
 const cron = require('node-cron');
 const { processOrderById, runQueueCron } = require('./mantra_service.cjs');
+const { runCron } = require('./mantra_cron.cjs');
 require('dotenv').config();
 
 const app = express();
@@ -15,6 +16,12 @@ cron.schedule('*/30 * * * * *', async () => {
   await runQueueCron();
 });
 console.log(`⏰ Cron [Cola Eventos] activado. Escaneando la cola cada 30 segundos...`);
+
+// Cron de monitoreo de Testmantra y Reprogramaciones (se ejecuta cada minuto)
+cron.schedule('* * * * *', async () => {
+  await runCron();
+});
+console.log(`⏰ Cron [Monitoreo General] activado. Escaneando tablas cada minuto...`);
 
 // Endpoint Webhook para recibir notificaciones por evento/cambio de estado
 app.post('/webhook/estado-cambiado', async (req, res) => {
