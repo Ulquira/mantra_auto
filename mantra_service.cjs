@@ -1,9 +1,20 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
-const MANTRA_GROUP_ID = process.env.MANTRA_GROUP_ID || "685dc70e53dd0ac2492c69ca";
-const MANTRA_API_KEY = process.env.MANTRA_API_KEY || "3d0d59f1-f3ea-47be-b5b0-d7ffca33817d";
-const MANTRA_TEMPLATE_ID = process.env.MANTRA_TEMPLATE_ID || "6a7a457736ef53a657fc03ed";
+// Mapeo dinámico de Credenciales y Plantillas según el Tipo de Servicio
+const MANTRA_CONFIG = {
+  Instalacion: {
+    GROUP_ID: "685dc70e53dd0ac2492c69ca",
+    API_KEY: "3d0d59f1-f3ea-47be-b5b0-d7ffca33817d",
+    TEMPLATE_ID: "6875723e1cb8562af849400e",
+    TEMPLATE_REPROG_ID: "6a9052de39ca4176657bb8df"
+  },
+  Averias: {
+    GROUP_ID: "68508b455ba42fd0a6660300",
+    API_KEY: "618684ea-0e61-478f-9b22-bc0fd8b8a934",
+    TEMPLATE_ID: "68fac2ea40478663c8b51c36"
+  }
+};
 
 const URL_CREATE_CONTACT = "https://wbpback2pro2.mantra.chat/contacts/new";
 const URL_SEND_TEMPLATE = "https://wbpback2pro2.mantra.chat/contacts/send";
@@ -56,9 +67,22 @@ async function sendMantraNotification(orden) {
   console.log(`Procesando Orden: ${orden.OrdenId} - ${name} (${phone})`);
   console.log(`=================================================`);
 
+  // Cruce de datos (Mock Join). Determinamos el tipo basado en TipoOrden o Producto
+  // Asumimos "Instalacion" como defecto si no se identifica claramente como Avería/Visita
+  let tipoServicio = 'Instalacion';
+  const tipoOrden = (orden.TipoOrden || '').toLowerCase();
+  const producto = (orden.Producto || '').toLowerCase();
+  
+  if (tipoOrden.includes('averia') || tipoOrden.includes('visita') || producto.includes('averia')) {
+    tipoServicio = 'Averias';
+  }
+
+  const credentials = MANTRA_CONFIG[tipoServicio];
+  console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Template Asignado: ${credentials.TEMPLATE_ID}`);
+
   const contactPayload = {
-    groupId: MANTRA_GROUP_ID,
-    apiKey: MANTRA_API_KEY,
+    groupId: credentials.GROUP_ID,
+    apiKey: credentials.API_KEY,
     data: {
       name: name,
       phone: phone,
@@ -83,14 +107,112 @@ async function sendMantraNotification(orden) {
     console.log("   Respuesta Servidor (Contacto):", jsonContact.resultOp || jsonContact);
 
     const templatePayload = {
-      groupId: MANTRA_GROUP_ID,
-      apiKey: MANTRA_API_KEY,
-      templateId: MANTRA_TEMPLATE_ID,
+      groupId: credentials.GROUP_ID,
+      apiKey: credentials.API_KEY,
+      templateId: credentials.TEMPLATE_ID,
       phone: phone,
       countryCode: "51" 
     };
 
     console.log("\n2. Enviando petición para disparar plantilla...");
+    const resTemplate = await fetch(URL_SEND_TEMPLATE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(templatePayload)
+    });
+    
+    const jsonTemplate = await resTemplate.json();
+    console.log("   Respuesta Servidor (Plantilla):", jsonTemplate);
+
+    if (jsonTemplate.ok !== true) {
+      console.error("   [ERROR] La plantilla no se pudo enviar. Respuesta de Mantra:", jsonTemplate);
+      return { success: false, errorDetail: JSON.stringify(jsonTemplate) };
+    }
+
+    return { success: true, errorDetail: null }; 
+  } catch (err) {
+    console.error("   [ERROR CRÍTICO] Fallo en la red o API de Mantra:", err.message);
+    return { success: false, errorDetail: err.message };
+  }
+}
+
+async function sendReprogramacionNotification(reprog, orden) {
+  const rawPhone = orden.TeleMovilNume || '';
+  const phone = rawPhone.replace(/\D/g, '').slice(-9);
+  const name = orden.ClienteFinal;
+
+  // Formateo de fecha según reprogramaciones.fecha_solicitada
+  let fechaFormateada = "fecha por confirmar";
+  if (reprog.fecha_solicitada) {
+    const dateObj = new Date(reprog.fecha_solicitada);
+    const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+    fechaFormateada = `${dateObj.getUTCDate()} de ${meses[dateObj.getUTCMonth()]}`;
+  }
+
+  const rangoHorario = reprog.turno || "horario por confirmar";
+
+  console.log(`\n=================================================`);
+  console.log(`Procesando Reprogramación ID: ${reprog.id} | Orden: ${orden.OrdenId} - ${name} (${phone})`);
+  console.log(`=================================================`);
+
+  // Evaluamos tipo de servicio para ver si aplica (por ahora solo Instalación)
+  let tipoServicio = 'Instalacion';
+  const tipoOrden = (orden.TipoOrden || '').toLowerCase();
+  const producto = (orden.Producto || '').toLowerCase();
+  
+  if (tipoOrden.includes('averia') || tipoOrden.includes('visita') || producto.includes('averia')) {
+    tipoServicio = 'Averias';
+  }
+
+  if (tipoServicio !== 'Instalacion') {
+    console.log(`[SKIP] La orden es de tipo ${tipoServicio}. Por ahora solo enviamos reprogramaciones para Instalaciones.`);
+    return { success: true, skipped: true, errorDetail: 'Notificación omitida, solo aplica para Instalación.' };
+  }
+
+  const credentials = MANTRA_CONFIG[tipoServicio];
+  
+  if (!credentials.TEMPLATE_REPROG_ID) {
+    console.log(`[SKIP] No hay plantilla de reprogramación configurada para el tipo ${tipoServicio}.`);
+    return { success: true, skipped: true, errorDetail: 'Plantilla de reprogramación no configurada.' };
+  }
+
+  console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Template Asignado: ${credentials.TEMPLATE_REPROG_ID}`);
+
+  const contactPayload = {
+    groupId: credentials.GROUP_ID,
+    apiKey: credentials.API_KEY,
+    data: {
+      name: name,
+      phone: phone,
+      countryCode: "51",
+      custom_7: name,
+      custom_3: orden.IdenServi ? orden.IdenServi.split('|')[0].trim() : "tu plan Win",
+      custom_1: fechaFormateada,
+      custom_2: rangoHorario,
+      custom_10: `https://go.win.pe/seguimiento/${orden.token}`
+    }
+  };
+
+  try {
+    console.log("1. Enviando petición para crear/actualizar contacto (Reprogramación)...");
+    const resContact = await fetch(URL_CREATE_CONTACT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(contactPayload)
+    });
+    
+    const jsonContact = await resContact.json();
+    console.log("   Respuesta Servidor (Contacto):", jsonContact.resultOp || jsonContact);
+
+    const templatePayload = {
+      groupId: credentials.GROUP_ID,
+      apiKey: credentials.API_KEY,
+      templateId: credentials.TEMPLATE_REPROG_ID,
+      phone: phone,
+      countryCode: "51" 
+    };
+
+    console.log("\n2. Enviando petición para disparar plantilla de reprogramación...");
     const resTemplate = await fetch(URL_SEND_TEMPLATE, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -120,15 +242,13 @@ async function processOrderById(ordenId) {
     const [rows] = await conn.query(`
       SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time
       FROM Testmantra t
-      LEFT JOIN LOG_NOTIFICACIONES_WSP l
-        ON t.OrdenId = l.OrdenId AND l.EstadoNotificado = t.Estado
-      WHERE t.OrdenId = ? AND t.Estado = 'Agendada' AND l.id IS NULL
+      WHERE t.OrdenId = ?
     `, [ordenId]);
 
     if (rows.length === 0) {
       return {
         success: false,
-        message: `La orden ${ordenId} no está en estado 'Agendada' o ya fue notificada previamente.`
+        message: `La orden ${ordenId} no existe en Testmantra.`
       };
     }
 
@@ -207,26 +327,60 @@ async function runCron(filterMode = 'ALL') {
 async function runQueueCron() {
   const conn = await getDbConnection();
   try {
-    const [colaRows] = await conn.query('SELECT * FROM COLA_NOTIFICACIONES_MANTRA ORDER BY id ASC LIMIT 50');
-    if (colaRows.length === 0) return;
+    // 1. Validar la hora actual en zona horaria America/Lima
+    const options = { timeZone: 'America/Lima', hour12: false, hour: 'numeric' };
+    const formatter = new Intl.DateTimeFormat([], options);
+    const horaActual = parseInt(formatter.format(new Date()), 10);
 
-    for (const item of colaRows) {
-      const ordenId = item.ordenId;
-      console.log(`[QUEUE] Procesando orden ${ordenId} de la cola...`);
+    // 2. Determinar el tramo objetivo basado en la hora actual
+    let tramoFiltro = null;
+    if (horaActual >= 7 && horaActual <= 9) tramoFiltro = '08';
+    else if (horaActual >= 11 && horaActual <= 13) tramoFiltro = '12';
+    else if (horaActual >= 15 && horaActual <= 17) tramoFiltro = '16';
+
+    if (!tramoFiltro) {
+      // Fuera de las ventanas permitidas, no procesamos la cola, cerramos la conexión
+      await conn.end();
+      return;
+    }
+
+    // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola y cuyo F.Soli corresponda al tramo objetivo
+    const queryStr = `
+      SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, c.id as colaId
+      FROM COLA_NOTIFICACIONES_MANTRA c
+      INNER JOIN Testmantra t ON c.ordenId = t.OrdenId
+      WHERE TIME(\`F.Soli\`) LIKE ? 
+      ORDER BY c.id ASC LIMIT 50
+    `;
+    const searchPattern = `${tramoFiltro}%`;
+
+    const [rows] = await conn.query(queryStr, [searchPattern]);
+    
+    if (rows.length === 0) {
+      await conn.end();
+      return;
+    }
+
+    console.log(`[QUEUE] Evaluando Tramo Horario [${tramoFiltro}:00]. Procesando ${rows.length} órdenes en cola.`);
+
+    for (const row of rows) {
+      const result = await sendMantraNotification(row);
       
-      const result = await processOrderById(ordenId);
-      
-      if (result.success || result.message?.includes('notificada previamente')) {
-        await conn.query('DELETE FROM COLA_NOTIFICACIONES_MANTRA WHERE id = ?', [item.id]);
-        console.log(`[QUEUE] Orden ${ordenId} eliminada de la cola.`);
-      } else {
-        console.error(`[QUEUE ERROR] Fallo al procesar la orden ${ordenId} desde la cola.`);
-      }
+      await conn.query(
+        'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?)',
+        [row.OrdenId, row.Estado, result.success, result.errorDetail]
+      );
+
+      // Eliminamos siempre de la cola, ya sea éxito o error reportado para no atorarnos
+      await conn.query('DELETE FROM COLA_NOTIFICACIONES_MANTRA WHERE id = ?', [row.colaId]);
+      console.log(`[QUEUE] Orden ${row.OrdenId} eliminada de la cola.`);
     }
   } catch (err) {
     console.error("❌ Error en QueueCron:", err.message);
   } finally {
-    await conn.end();
+    if (conn && conn.connection && conn.connection._closing === false) {
+      await conn.end();
+    }
   }
 }
 
@@ -234,6 +388,7 @@ module.exports = {
   getDbConnection,
   ensureLogTableExists,
   sendMantraNotification,
+  sendReprogramacionNotification,
   processOrderById,
   runCron,
   runQueueCron

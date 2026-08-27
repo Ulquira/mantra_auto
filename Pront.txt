@@ -1,0 +1,49 @@
+Requerimientos:
+
+Lógica de Programación Temporal (Scheduling): Implementa un mecanismo para determinar el "tramo" de envío en función de la hora actual del sistema:
+
+Si la hora actual está entre las 07:00:00 y las 09:00:00, procesar el tramo "08:00:00".
+
+Si la hora actual está entre las 11:00:00 y las 13:00:00, procesar el tramo "12:00:00".
+
+Si la hora actual está entre las 15:00:00 y las 17:00:00, procesar el tramo "16:00:00".
+
+Cruce de Datos (Mock Data): Simula el acceso a una base de datos mediante diccionarios o listas de diccionarios en Python. Debes tener una estructura que represente la tabla tiposervicio (columnas: Servicio, tipo) y otra estructura que represente los datos de origen que contienen la columna producto y el teléfono destino. El script debe realizar un "Join" lógico: cruzar producto de la data de origen con Servicio de tiposervicio para obtener el tipo ('Instalacion', 'Averias', etc.).
+
+Asignación de Plantillas y Credenciales: Basado en el tipo resuelto, asigna los valores correctos de ID Grupo, API Key y Plantilla (Template ID):
+
+Si el tipo es derivado como "Instalacion" (relacionado al ejemplo de Instalaciones):
+
+ID_GRUPO: "685dc70e53dd0ac2492c69ca"
+
+API: "3d0d59f1-f3ea-47be-b5b0-d7ffca33817d"
+
+Template ID: "6875723e1cb8562af849400e"
+
+Si el tipo es derivado como "Visita Tecnica" (o equivalente para Averias, según la lógica del requerimiento):
+
+ID_GRUPO: "68508b455ba42fd0a6660300"
+
+API: "618684ea-0e61-478f-9b22-bc0fd8b8a934"
+
+Template ID: "68fac2ea40478663c8b51c36"
+
+Simulación de Envío: Crea una función que simule el envío del mensaje imprimiendo en consola (o mediante logs) la carga útil que se enviaría (API, Group ID, Template ID, Teléfono, Tramo temporal).
+
+Restricciones de Código:
+
+Todo el código debe adherirse al estándar PEP 8.
+
+Utiliza type hints de forma exhaustiva en todas las funciones (ej. Dict[str, str], Optional[str]).
+
+Incluye docstrings en formato Google para detallar el propósito de las funciones, sus argumentos y los valores de retorno.
+
+Utiliza el módulo datetime estándar para el manejo del tiempo.
+
+Implementa una función principal (main) para orquestar la ejecución lógica.
+
+El código debe estar preparado para ser extendido (ej. agregar lógica de "Zona" posteriormente).
+
+Salida esperada:
+
+Proporciona ÚNICAMENTE el código completo y ejecutable dentro de un bloque markdown de Python. No incluyas texto explicativo antes o después del bloque de código.
