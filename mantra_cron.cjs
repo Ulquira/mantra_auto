@@ -15,11 +15,11 @@ async function runCron() {
       FROM Testmantra t
       LEFT JOIN LOG_NOTIFICACIONES_WSP l
         ON t.OrdenId = l.OrdenId AND l.EstadoNotificado = t.Estado
-      WHERE t.Estado = 'Agendada' AND l.id IS NULL
+      WHERE t.Estado IN ('Agendada', 'Pendiente') AND l.id IS NULL
     `);
 
     if (rows.length === 0) {
-      console.log("✔ No hay órdenes nuevas en estado 'Agendada' pendientes de notificar.");
+      console.log("✔ No hay órdenes nuevas en estado 'Agendada' o 'Pendiente' pendientes de notificar.");
     } else {
       console.log(`Encontradas ${rows.length} órden(es) pendientes de notificación.`);
       
@@ -47,7 +47,7 @@ async function runCron() {
       JOIN Testmantra t ON r.token = t.token
       LEFT JOIN LOG_NOTIFICACIONES_WSP l
         ON l.OrdenId = r.id AND l.EstadoNotificado = 'Reprogramacion'
-      WHERE l.id IS NULL
+      WHERE t.Estado IN ('Agendada', 'Pendiente') AND l.id IS NULL
     `);
 
     if (reprogs.length === 0) {
