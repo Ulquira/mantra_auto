@@ -22,6 +22,16 @@ const MANTRA_CONFIG = {
 const URL_CREATE_CONTACT = "https://wbpback2pro2.mantra.chat/contacts/new";
 const URL_SEND_TEMPLATE = "https://wbpback2pro2.mantra.chat/contacts/send";
 
+function extractPlanName(idenServi) {
+  if (!idenServi) return "tu plan Win";
+  const match = idenServi.match(/Paquete\s*:\s*([^|]+)/i);
+  if (match && match[1]) {
+    const plan = match[1].trim();
+    if (plan) return plan;
+  }
+  return idenServi.split('|')[0].trim() || "tu plan Win";
+}
+
 async function getDbConnection() {
   return await mysql.createConnection({
     host: process.env.DB_HOST,
@@ -103,7 +113,7 @@ async function sendMantraNotification(orden) {
       phone: phone,
       countryCode: "51",
       custom_7: name,
-      custom_3: orden.IdenServi ? orden.IdenServi.split('|')[0].trim() : "tu plan Win",
+      custom_3: extractPlanName(orden.IdenServi),
       custom_1: fechaFormateada,
       custom_2: rangoHorario,
       custom_10: `https://go.win.pe/seguimiento/${orden.token}`
@@ -207,7 +217,7 @@ async function sendReprogramacionNotification(reprog, orden) {
       phone: phone,
       countryCode: "51",
       custom_7: name,
-      custom_3: orden.IdenServi ? orden.IdenServi.split('|')[0].trim() : "tu plan Win",
+      custom_3: extractPlanName(orden.IdenServi),
       custom_1: fechaFormateada,
       custom_2: rangoHorario,
       custom_10: `https://go.win.pe/seguimiento/${orden.token}`
