@@ -6,13 +6,16 @@ const MANTRA_CONFIG = {
   Instalacion: {
     GROUP_ID: "685dc70e53dd0ac2492c69ca",
     API_KEY: "3d0d59f1-f3ea-47be-b5b0-d7ffca33817d",
-    TEMPLATE_ID: "6875723e1cb8562af849400e",
-    TEMPLATE_REPROG_ID: "6a9052de39ca4176657bb8df"
+    TEMPLATE_ID_DEFAULT: "6875723e1cb8562af849400e",
+    TEMPLATE_ID_OESTE2: "6a7a457736ef53a657fc03ed",
+    TEMPLATE_REPROG_ID: "6a9847e14f6db1b188cd5ce3"
   },
   Averias: {
     GROUP_ID: "68508b455ba42fd0a6660300",
     API_KEY: "618684ea-0e61-478f-9b22-bc0fd8b8a934",
-    TEMPLATE_ID: "68fac2ea40478663c8b51c36"
+    TEMPLATE_ID_DEFAULT: "68fac2ea40478663c8b51c36",
+    TEMPLATE_ID_OESTE2: "6a90c047e91ab8e19836a561",
+    TEMPLATE_REPROG_ID: "6a984a1d5781ebbf9f145a6b"
   }
 };
 
@@ -78,7 +81,9 @@ async function sendMantraNotification(orden) {
   }
 
   const credentials = MANTRA_CONFIG[tipoServicio];
-  console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Template Asignado: ${credentials.TEMPLATE_ID}`);
+  const sectorOperativo = (orden['Sector Operativo'] || '').toUpperCase();
+  const templateIdToUse = sectorOperativo.includes('OESTE 2') ? credentials.TEMPLATE_ID_OESTE2 : credentials.TEMPLATE_ID_DEFAULT;
+  console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Sector: ${sectorOperativo || 'N/A'} | Template Asignado: ${templateIdToUse}`);
 
   const contactPayload = {
     groupId: credentials.GROUP_ID,
@@ -109,7 +114,7 @@ async function sendMantraNotification(orden) {
     const templatePayload = {
       groupId: credentials.GROUP_ID,
       apiKey: credentials.API_KEY,
-      templateId: credentials.TEMPLATE_ID,
+      templateId: templateIdToUse,
       phone: phone,
       countryCode: "51" 
     };
@@ -162,11 +167,6 @@ async function sendReprogramacionNotification(reprog, orden) {
   
   if (tipoOrden.includes('averia') || tipoOrden.includes('visita') || producto.includes('averia')) {
     tipoServicio = 'Averias';
-  }
-
-  if (tipoServicio !== 'Instalacion') {
-    console.log(`[SKIP] La orden es de tipo ${tipoServicio}. Por ahora solo enviamos reprogramaciones para Instalaciones.`);
-    return { success: true, skipped: true, errorDetail: 'Notificación omitida, solo aplica para Instalación.' };
   }
 
   const credentials = MANTRA_CONFIG[tipoServicio];
