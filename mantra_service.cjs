@@ -105,6 +105,8 @@ async function sendMantraNotification(orden) {
   const templateIdToUse = sectorOperativo.includes('OESTE 2') ? credentials.TEMPLATE_ID_OESTE2 : credentials.TEMPLATE_ID_DEFAULT;
   console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Sector: ${sectorOperativo || 'N/A'} | Template Asignado: ${templateIdToUse}`);
 
+  const trackingLink = orden.token ? `https://go.win.pe/seguimiento/${orden.token}` : (orden.link || '');
+
   let customData = {};
   if (tipoServicio === 'Averias') {
     const ticket = orden.CodiSegui ? String(orden.CodiSegui).trim() : String(orden.OrdenId);
@@ -117,8 +119,10 @@ async function sendMantraNotification(orden) {
       custom_2: fechaFormateada,
       custom_3: rangoHorario,
       custom_4: direccion,
+      custom_5: trackingLink,
+      custom_6: trackingLink,
       custom_7: name,
-      custom_10: `https://go.win.pe/seguimiento/${orden.token}`
+      custom_10: trackingLink
     };
   } else {
     customData = {
@@ -128,8 +132,10 @@ async function sendMantraNotification(orden) {
       custom_1: fechaFormateada,
       custom_2: rangoHorario,
       custom_3: extractPlanName(orden.IdenServi),
+      custom_5: trackingLink,
+      custom_6: trackingLink,
       custom_7: name,
-      custom_10: `https://go.win.pe/seguimiento/${orden.token}`
+      custom_10: trackingLink
     };
   }
 
@@ -228,6 +234,8 @@ async function sendReprogramacionNotification(reprog, orden) {
 
   console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Template Asignado: ${credentials.TEMPLATE_REPROG_ID}`);
 
+  const trackingLink = orden.token ? `https://go.win.pe/seguimiento/${orden.token}` : (orden.link || '');
+
   let customData = {};
   if (tipoServicio === 'Averias') {
     const ticket = orden.CodiSegui ? String(orden.CodiSegui).trim() : String(orden.OrdenId);
@@ -240,8 +248,10 @@ async function sendReprogramacionNotification(reprog, orden) {
       custom_2: fechaFormateada,
       custom_3: rangoHorario,
       custom_4: direccion,
+      custom_5: trackingLink,
+      custom_6: trackingLink,
       custom_7: name,
-      custom_10: `https://go.win.pe/seguimiento/${orden.token}`
+      custom_10: trackingLink
     };
   } else {
     customData = {
@@ -251,8 +261,10 @@ async function sendReprogramacionNotification(reprog, orden) {
       custom_1: fechaFormateada,
       custom_2: rangoHorario,
       custom_3: extractPlanName(orden.IdenServi),
+      custom_5: trackingLink,
+      custom_6: trackingLink,
       custom_7: name,
-      custom_10: `https://go.win.pe/seguimiento/${orden.token}`
+      custom_10: trackingLink
     };
   }
 
