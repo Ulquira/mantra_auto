@@ -43,7 +43,7 @@ async function runCron() {
     // 2. Procesamiento de Reprogramaciones
     console.log("\n--- Procesando Reprogramaciones ---");
     const [reprogs] = await conn.query(`
-      SELECT r.*, t.OrdenId, t.TeleMovilNume, t.ClienteFinal, t.IdenServi, t.TipoOrden, t.Producto, t.\`Sector Operativo\`, ts.Tipo as CategoriaServicioMantra
+      SELECT r.*, t.OrdenId, t.TeleMovilNume, t.ClienteFinal, t.IdenServi, t.TipoOrden, t.Producto, t.\`Sector Operativo\`, t.CodiSegui, t.Direccion, ts.Tipo as CategoriaServicioMantra
       FROM reprogramaciones r
       JOIN Testmantra t ON r.token = t.token
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
@@ -68,6 +68,8 @@ async function runCron() {
           TipoOrden: reprog.TipoOrden,
           Producto: reprog.Producto,
           'Sector Operativo': reprog['Sector Operativo'],
+          CodiSegui: reprog.CodiSegui,
+          Direccion: reprog.Direccion,
           CategoriaServicioMantra: reprog.CategoriaServicioMantra
         };
 

@@ -105,19 +105,38 @@ async function sendMantraNotification(orden) {
   const templateIdToUse = sectorOperativo.includes('OESTE 2') ? credentials.TEMPLATE_ID_OESTE2 : credentials.TEMPLATE_ID_DEFAULT;
   console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Sector: ${sectorOperativo || 'N/A'} | Template Asignado: ${templateIdToUse}`);
 
-  const contactPayload = {
-    groupId: credentials.GROUP_ID,
-    apiKey: credentials.API_KEY,
-    data: {
+  let customData = {};
+  if (tipoServicio === 'Averias') {
+    const ticket = orden.CodiSegui ? String(orden.CodiSegui).trim() : String(orden.OrdenId);
+    const direccion = orden.Direccion ? orden.Direccion.split('||')[0].trim() : "";
+    customData = {
       name: name,
       phone: phone,
       countryCode: "51",
+      custom_1: ticket,
+      custom_2: fechaFormateada,
+      custom_3: rangoHorario,
+      custom_4: direccion,
       custom_7: name,
-      custom_3: extractPlanName(orden.IdenServi),
+      custom_10: `https://go.win.pe/seguimiento/${orden.token}`
+    };
+  } else {
+    customData = {
+      name: name,
+      phone: phone,
+      countryCode: "51",
       custom_1: fechaFormateada,
       custom_2: rangoHorario,
+      custom_3: extractPlanName(orden.IdenServi),
+      custom_7: name,
       custom_10: `https://go.win.pe/seguimiento/${orden.token}`
-    }
+    };
+  }
+
+  const contactPayload = {
+    groupId: credentials.GROUP_ID,
+    apiKey: credentials.API_KEY,
+    data: customData
   };
 
   try {
@@ -209,19 +228,38 @@ async function sendReprogramacionNotification(reprog, orden) {
 
   console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Template Asignado: ${credentials.TEMPLATE_REPROG_ID}`);
 
-  const contactPayload = {
-    groupId: credentials.GROUP_ID,
-    apiKey: credentials.API_KEY,
-    data: {
+  let customData = {};
+  if (tipoServicio === 'Averias') {
+    const ticket = orden.CodiSegui ? String(orden.CodiSegui).trim() : String(orden.OrdenId);
+    const direccion = orden.Direccion ? orden.Direccion.split('||')[0].trim() : "";
+    customData = {
       name: name,
       phone: phone,
       countryCode: "51",
+      custom_1: ticket,
+      custom_2: fechaFormateada,
+      custom_3: rangoHorario,
+      custom_4: direccion,
       custom_7: name,
-      custom_3: extractPlanName(orden.IdenServi),
+      custom_10: `https://go.win.pe/seguimiento/${orden.token}`
+    };
+  } else {
+    customData = {
+      name: name,
+      phone: phone,
+      countryCode: "51",
       custom_1: fechaFormateada,
       custom_2: rangoHorario,
+      custom_3: extractPlanName(orden.IdenServi),
+      custom_7: name,
       custom_10: `https://go.win.pe/seguimiento/${orden.token}`
-    }
+    };
+  }
+
+  const contactPayload = {
+    groupId: credentials.GROUP_ID,
+    apiKey: credentials.API_KEY,
+    data: customData
   };
 
   try {
