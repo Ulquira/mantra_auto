@@ -11,8 +11,9 @@ async function runCron() {
     // 1. Procesamiento de Nuevas Órdenes Agendadas
     console.log("--- Procesando Órdenes Agendadas ---");
     const [rows] = await conn.query(`
-      SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time
+      SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
       FROM Testmantra t
+      LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
       LEFT JOIN LOG_NOTIFICACIONES_WSP l
         ON t.OrdenId = l.OrdenId AND l.EstadoNotificado = t.Estado
       WHERE t.Estado IN ('Agendada', 'Pendiente') AND l.id IS NULL
@@ -42,9 +43,10 @@ async function runCron() {
     // 2. Procesamiento de Reprogramaciones
     console.log("\n--- Procesando Reprogramaciones ---");
     const [reprogs] = await conn.query(`
-      SELECT r.*, t.OrdenId, t.TeleMovilNume, t.ClienteFinal, t.IdenServi, t.TipoOrden, t.Producto
+      SELECT r.*, t.OrdenId, t.TeleMovilNume, t.ClienteFinal, t.IdenServi, t.TipoOrden, t.Producto, t.\`Sector Operativo\`, ts.Tipo as CategoriaServicioMantra
       FROM reprogramaciones r
       JOIN Testmantra t ON r.token = t.token
+      LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
       LEFT JOIN LOG_NOTIFICACIONES_WSP l
         ON l.OrdenId = r.id AND l.EstadoNotificado = 'Reprogramacion'
       WHERE t.Estado IN ('Agendada', 'Pendiente') AND l.id IS NULL
@@ -64,7 +66,9 @@ async function runCron() {
           IdenServi: reprog.IdenServi,
           token: reprog.token,
           TipoOrden: reprog.TipoOrden,
-          Producto: reprog.Producto
+          Producto: reprog.Producto,
+          'Sector Operativo': reprog['Sector Operativo'],
+          CategoriaServicioMantra: reprog.CategoriaServicioMantra
         };
 
         const result = await sendReprogramacionNotification(reprog, ordenContext);

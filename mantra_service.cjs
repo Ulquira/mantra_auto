@@ -70,14 +70,24 @@ async function sendMantraNotification(orden) {
   console.log(`Procesando Orden: ${orden.OrdenId} - ${name} (${phone})`);
   console.log(`=================================================`);
 
-  // Cruce de datos (Mock Join). Determinamos el tipo basado en TipoOrden o Producto
-  // Asumimos "Instalacion" como defecto si no se identifica claramente como Avería/Visita
+  // Cruce de datos basado en TipoServicioBD
   let tipoServicio = 'Instalacion';
-  const tipoOrden = (orden.TipoOrden || '').toLowerCase();
-  const producto = (orden.Producto || '').toLowerCase();
-  
-  if (tipoOrden.includes('averia') || tipoOrden.includes('visita') || producto.includes('averia')) {
+  const categoria = (orden.CategoriaServicioMantra || '').toUpperCase();
+
+  if (categoria === 'NO') {
+    console.log(`[SKIP] El producto no requiere notificación (Tipo = NO).`);
+    return { success: true, skipped: true, errorDetail: 'El producto no requiere notificación (Tipo = NO).' };
+  } else if (categoria === 'AVERIAS' || categoria === 'POSTVENTA') {
     tipoServicio = 'Averias';
+  } else if (categoria === 'INSTALACION' || categoria === 'PROVINCIA') {
+    tipoServicio = 'Instalacion';
+  } else {
+    // Fallback si no está mapeado en la tabla TipoServicio
+    const tipoOrden = (orden.TipoOrden || '').toLowerCase();
+    const producto = (orden.Producto || '').toLowerCase();
+    if (tipoOrden.includes('averia') || tipoOrden.includes('visita') || producto.includes('averia')) {
+      tipoServicio = 'Averias';
+    }
   }
 
   const credentials = MANTRA_CONFIG[tipoServicio];
@@ -160,13 +170,24 @@ async function sendReprogramacionNotification(reprog, orden) {
   console.log(`Procesando Reprogramación ID: ${reprog.id} | Orden: ${orden.OrdenId} - ${name} (${phone})`);
   console.log(`=================================================`);
 
-  // Evaluamos tipo de servicio para ver si aplica (por ahora solo Instalación)
+  // Evaluamos tipo de servicio basado en tabla TipoServicio
   let tipoServicio = 'Instalacion';
-  const tipoOrden = (orden.TipoOrden || '').toLowerCase();
-  const producto = (orden.Producto || '').toLowerCase();
-  
-  if (tipoOrden.includes('averia') || tipoOrden.includes('visita') || producto.includes('averia')) {
+  const categoria = (orden.CategoriaServicioMantra || '').toUpperCase();
+
+  if (categoria === 'NO') {
+    console.log(`[SKIP] El producto no requiere notificación de reprogramación (Tipo = NO).`);
+    return { success: true, skipped: true, errorDetail: 'El producto no requiere notificación (Tipo = NO).' };
+  } else if (categoria === 'AVERIAS' || categoria === 'POSTVENTA') {
     tipoServicio = 'Averias';
+  } else if (categoria === 'INSTALACION' || categoria === 'PROVINCIA') {
+    tipoServicio = 'Instalacion';
+  } else {
+    // Fallback si no está mapeado
+    const tipoOrden = (orden.TipoOrden || '').toLowerCase();
+    const producto = (orden.Producto || '').toLowerCase();
+    if (tipoOrden.includes('averia') || tipoOrden.includes('visita') || producto.includes('averia')) {
+      tipoServicio = 'Averias';
+    }
   }
 
   const credentials = MANTRA_CONFIG[tipoServicio];
@@ -240,8 +261,9 @@ async function processOrderById(ordenId) {
     await ensureLogTableExists(conn);
 
     const [rows] = await conn.query(`
-      SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time
+      SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
       FROM Testmantra t
+      LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
       WHERE t.OrdenId = ?
     `, [ordenId]);
 
@@ -288,8 +310,9 @@ async function runCron(filterMode = 'ALL') {
     }
 
     const queryStr = `
-      SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time
+      SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
       FROM Testmantra t
+      LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
       LEFT JOIN LOG_NOTIFICACIONES_WSP l
         ON t.OrdenId = l.OrdenId AND l.EstadoNotificado = t.Estado
       WHERE t.Estado = 'Agendada' AND l.id IS NULL ${dateCondition}
@@ -346,9 +369,10 @@ async function runQueueCron() {
 
     // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola y cuyo F.Soli corresponda al tramo objetivo
     const queryStr = `
-      SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, c.id as colaId
+      SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, c.id as colaId, ts.Tipo as CategoriaServicioMantra
       FROM COLA_NOTIFICACIONES_MANTRA c
       INNER JOIN Testmantra t ON c.ordenId = t.OrdenId
+      LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
       WHERE TIME(\`F.Soli\`) LIKE ? 
       ORDER BY c.id ASC LIMIT 50
     `;
