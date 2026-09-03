@@ -32,6 +32,24 @@ function extractPlanName(idenServi) {
   return idenServi.split('|')[0].trim() || "tu plan Win";
 }
 
+function extractFirstName(fullName) {
+  if (!fullName || typeof fullName !== 'string') return "Cliente";
+  const clean = fullName.trim().replace(/\s+/g, ' ');
+  if (!clean) return "Cliente";
+  
+  // Si viene en formato "APELLIDOS, NOMBRES"
+  if (clean.includes(',')) {
+    const parts = clean.split(',');
+    const nombres = (parts[1] || '').trim();
+    if (nombres) {
+      return nombres.split(' ')[0];
+    }
+  }
+  
+  // Formato normal: "RODRIGO LUIS SANIZ BAZAN" -> "RODRIGO"
+  return clean.split(' ')[0];
+}
+
 async function getDbConnection() {
   return await mysql.createConnection({
     host: process.env.DB_HOST,
@@ -58,7 +76,8 @@ async function ensureLogTableExists(conn) {
 async function sendMantraNotification(orden) {
   const rawPhone = orden.TeleMovilNume || '';
   const phone = rawPhone.replace(/\D/g, '').slice(-9);
-  const name = orden.ClienteFinal;
+  const fullName = orden.ClienteFinal || '';
+  const firstName = extractFirstName(fullName);
 
   let fechaFormateada = "fecha por confirmar";
   if (orden.f_date) {
@@ -77,7 +96,7 @@ async function sendMantraNotification(orden) {
   }
 
   console.log(`\n=================================================`);
-  console.log(`Procesando Orden: ${orden.OrdenId} - ${name} (${phone})`);
+  console.log(`Procesando Orden: ${orden.OrdenId} - ${firstName} (${phone}) [Nombre completo: ${fullName}]`);
   console.log(`=================================================`);
 
   // Cruce de datos basado en TipoServicioBD
@@ -112,7 +131,7 @@ async function sendMantraNotification(orden) {
     const ticket = orden.CodiSegui ? String(orden.CodiSegui).trim() : String(orden.OrdenId);
     const direccion = orden.Direccion ? orden.Direccion.split('||')[0].trim() : "";
     customData = {
-      name: name,
+      name: firstName,
       phone: phone,
       countryCode: "51",
       custom_1: ticket,
@@ -121,12 +140,12 @@ async function sendMantraNotification(orden) {
       custom_4: direccion,
       custom_5: trackingLink,
       custom_6: trackingLink,
-      custom_7: name,
+      custom_7: firstName,
       custom_10: trackingLink
     };
   } else {
     customData = {
-      name: name,
+      name: firstName,
       phone: phone,
       countryCode: "51",
       custom_1: fechaFormateada,
@@ -134,7 +153,7 @@ async function sendMantraNotification(orden) {
       custom_3: extractPlanName(orden.IdenServi),
       custom_5: trackingLink,
       custom_6: trackingLink,
-      custom_7: name,
+      custom_7: firstName,
       custom_10: trackingLink
     };
   }
@@ -189,7 +208,8 @@ async function sendMantraNotification(orden) {
 async function sendReprogramacionNotification(reprog, orden) {
   const rawPhone = orden.TeleMovilNume || '';
   const phone = rawPhone.replace(/\D/g, '').slice(-9);
-  const name = orden.ClienteFinal;
+  const fullName = orden.ClienteFinal || '';
+  const firstName = extractFirstName(fullName);
 
   // Formateo de fecha según reprogramaciones.fecha_solicitada
   let fechaFormateada = "fecha por confirmar";
@@ -202,7 +222,7 @@ async function sendReprogramacionNotification(reprog, orden) {
   const rangoHorario = reprog.turno || "horario por confirmar";
 
   console.log(`\n=================================================`);
-  console.log(`Procesando Reprogramación ID: ${reprog.id} | Orden: ${orden.OrdenId} - ${name} (${phone})`);
+  console.log(`Procesando Reprogramación ID: ${reprog.id} | Orden: ${orden.OrdenId} - ${firstName} (${phone}) [Nombre completo: ${fullName}]`);
   console.log(`=================================================`);
 
   // Evaluamos tipo de servicio basado en tabla TipoServicio
@@ -241,7 +261,7 @@ async function sendReprogramacionNotification(reprog, orden) {
     const ticket = orden.CodiSegui ? String(orden.CodiSegui).trim() : String(orden.OrdenId);
     const direccion = orden.Direccion ? orden.Direccion.split('||')[0].trim() : "";
     customData = {
-      name: name,
+      name: firstName,
       phone: phone,
       countryCode: "51",
       custom_1: ticket,
@@ -250,12 +270,12 @@ async function sendReprogramacionNotification(reprog, orden) {
       custom_4: direccion,
       custom_5: trackingLink,
       custom_6: trackingLink,
-      custom_7: name,
+      custom_7: firstName,
       custom_10: trackingLink
     };
   } else {
     customData = {
-      name: name,
+      name: firstName,
       phone: phone,
       countryCode: "51",
       custom_1: fechaFormateada,
@@ -263,7 +283,7 @@ async function sendReprogramacionNotification(reprog, orden) {
       custom_3: extractPlanName(orden.IdenServi),
       custom_5: trackingLink,
       custom_6: trackingLink,
-      custom_7: name,
+      custom_7: firstName,
       custom_10: trackingLink
     };
   }
@@ -375,13 +395,13 @@ async function runCron(filterMode = 'ALL') {
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
       LEFT JOIN LOG_NOTIFICACIONES_WSP l
         ON t.OrdenId = l.OrdenId AND l.EstadoNotificado = t.Estado
-      WHERE t.Estado = 'Agendada' AND l.id IS NULL ${dateCondition}
+      WHERE t.Estado IN ('Agendada', 'Pendiente') AND l.id IS NULL ${dateCondition}
     `;
 
     const [rows] = await conn.query(queryStr);
 
     if (rows.length === 0) {
-      console.log(`✔ No hay órdenes pendientes en estado 'Agendada' para la condición [${modeLabel}].`);
+      console.log(`✔ No hay órdenes pendientes en estado 'Agendada' o 'Pendiente' para la condición [${modeLabel}].`);
     } else {
       console.log(`Encontradas ${rows.length} órden(es) pendientes de notificación [${modeLabel}].`);
       
