@@ -446,11 +446,11 @@ async function runQueueCron() {
       INNER JOIN LOG_NOTIFICACIONES_WSP l ON c.ordenId = l.OrdenId
       WHERE l.EnviadoExitosamente = 1
     `);
-    // Eliminamos de la cola órdenes cuyo estado actual ya no es Agendada o Pendiente
+    // Eliminamos de la cola órdenes cuyo estado actual ya no es Pendiente
     await conn.query(`
       DELETE c FROM COLA_NOTIFICACIONES_MANTRA c
       INNER JOIN Testmantra t ON c.ordenId = t.OrdenId
-      WHERE t.Estado NOT IN ('Agendada', 'Pendiente')
+      WHERE t.Estado <> 'Pendiente'
     `);
 
     // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola y cuyo F.Soli corresponda al tramo objetivo
@@ -461,7 +461,7 @@ async function runQueueCron() {
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
       LEFT JOIN LOG_NOTIFICACIONES_WSP l ON t.OrdenId = l.OrdenId AND l.EnviadoExitosamente = 1
       WHERE TIME(\`F.Soli\`) LIKE ? 
-        AND t.Estado IN ('Agendada', 'Pendiente')
+        AND t.Estado = 'Pendiente'
         AND l.id IS NULL
       ORDER BY c.id ASC LIMIT 50
     `;
