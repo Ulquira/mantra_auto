@@ -438,6 +438,20 @@ async function runQueueCron() {
       return;
     }
 
+    // 2.5 Limpieza de Zombies en la Cola
+    // Eliminamos de la cola órdenes que ya fueron notificadas exitosamente
+    await conn.query(`
+      DELETE c FROM COLA_NOTIFICACIONES_MANTRA c
+      INNER JOIN LOG_NOTIFICACIONES_WSP l ON c.ordenId = l.OrdenId
+      WHERE l.EnviadoExitosamente = 1
+    `);
+    // Eliminamos de la cola órdenes cuyo estado actual ya no es Agendada o Pendiente
+    await conn.query(`
+      DELETE c FROM COLA_NOTIFICACIONES_MANTRA c
+      INNER JOIN Testmantra t ON c.ordenId = t.OrdenId
+      WHERE t.Estado NOT IN ('Agendada', 'Pendiente')
+    `);
+
     // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola y cuyo F.Soli corresponda al tramo objetivo
     const queryStr = `
       SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, c.id as colaId, ts.Tipo as CategoriaServicioMantra
@@ -445,6 +459,7 @@ async function runQueueCron() {
       INNER JOIN Testmantra t ON c.ordenId = t.OrdenId
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
       WHERE TIME(\`F.Soli\`) LIKE ? 
+        AND t.Estado IN ('Agendada', 'Pendiente')
       ORDER BY c.id ASC LIMIT 50
     `;
     const searchPattern = `${tramoFiltro}%`;
