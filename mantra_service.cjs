@@ -80,19 +80,19 @@ async function sendMantraNotification(orden) {
   console.log(`Procesando Orden: ${orden.OrdenId} - ${name} (${phone})`);
   console.log(`=================================================`);
 
-  // Cruce de datos basado en TipoServicioBD
+  // Cruce de datos real utilizando el resultado del LEFT JOIN con tiposervicio
   let tipoServicio = 'Instalacion';
-  const categoria = (orden.CategoriaServicioMantra || '').toUpperCase();
+  const tipoServicioBD = (orden.TipoServicioBD || '').toUpperCase();
 
-  if (categoria === 'NO') {
+  if (tipoServicioBD === 'NO') {
     console.log(`[SKIP] El producto no requiere notificación (Tipo = NO).`);
     return { success: true, skipped: true, errorDetail: 'El producto no requiere notificación (Tipo = NO).' };
-  } else if (categoria === 'AVERIAS' || categoria === 'POSTVENTA') {
+  } else if (tipoServicioBD === 'AVERIAS' || tipoServicioBD === 'POSTVENTA') {
     tipoServicio = 'Averias';
-  } else if (categoria === 'INSTALACION' || categoria === 'PROVINCIA') {
+  } else if (tipoServicioBD === 'INSTALACION' || tipoServicioBD === 'PROVINCIA') {
     tipoServicio = 'Instalacion';
   } else {
-    // Fallback si no está mapeado en la tabla TipoServicio
+    // Fallback de seguridad estricto por si la tabla tiposervicio no tiene mapeado el producto
     const tipoOrden = (orden.TipoOrden || '').toLowerCase();
     const producto = (orden.Producto || '').toLowerCase();
     if (tipoOrden.includes('averia') || tipoOrden.includes('visita') || producto.includes('averia')) {
@@ -212,25 +212,29 @@ async function sendReprogramacionNotification(reprog, orden) {
   console.log(`Procesando Reprogramación ID: ${reprog.id} | Orden: ${orden.OrdenId} - ${name} (${phone})`);
   console.log(`=================================================`);
 
-  // Evaluamos tipo de servicio basado en tabla TipoServicio
-  let tipoServicio = 'Instalacion';
-  const categoria = (orden.CategoriaServicioMantra || '').toUpperCase();
+  // Cruce de datos real utilizando el resultado del LEFT JOIN con tiposervicio (para Reprogramaciones)
+  let tipoServicio = 'Desconocido';
+  const tipoServicioBD = (orden.CategoriaServicioMantra || '').toUpperCase();
 
-  if (categoria === 'NO') {
-    console.log(`[SKIP] El producto no requiere notificación de reprogramación (Tipo = NO).`);
-    return { success: true, skipped: true, errorDetail: 'El producto no requiere notificación (Tipo = NO).' };
-  } else if (categoria === 'AVERIAS' || categoria === 'POSTVENTA') {
+  if (tipoServicioBD === 'AVERIAS') {
     tipoServicio = 'Averias';
-  } else if (categoria === 'INSTALACION' || categoria === 'PROVINCIA') {
-    tipoServicio = 'Instalacion';
   } else {
-    // Fallback si no está mapeado
+    // Fallback de seguridad
     const tipoOrden = (orden.TipoOrden || '').toLowerCase();
     const producto = (orden.Producto || '').toLowerCase();
     if (tipoOrden.includes('averia') || tipoOrden.includes('visita') || producto.includes('averia')) {
       tipoServicio = 'Averias';
+    } else {
+      tipoServicio = 'Instalacion_u_Otros';
     }
   }
+
+  // --- MVP OVERRIDE REPROG: Apagar envíos EXCEPTO para AVERIAS ---
+  if (tipoServicio !== 'Averias') {
+    console.log(`[MVP SKIP] Reprogramación de Orden ${orden.OrdenId} corresponde a '${tipoServicioBD}'. El envío está apagado temporalmente para el MVP.`);
+    return { success: true, skipped: true, errorDetail: 'Skipped: Solo Averías activas para el MVP.' };
+  }
+  // ------------------------------------------------------------------------
 
   const credentials = MANTRA_CONFIG[tipoServicio];
   
