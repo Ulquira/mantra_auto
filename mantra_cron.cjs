@@ -8,7 +8,7 @@ async function runCron() {
   try {
     await ensureLogTableExists(conn);
 
-    // 1. Procesamiento de Nuevas Órdenes Pendientes (Solo Pendiente y sin notificación previa)
+    // 1. Procesamiento de Nuevas Órdenes Pendientes (Solo Pendiente, del MISMO DÍA y sin notificación previa)
     console.log("--- Procesando Órdenes Pendientes ---");
     const [rows] = await conn.query(`
       SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
@@ -16,7 +16,9 @@ async function runCron() {
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
       LEFT JOIN LOG_NOTIFICACIONES_WSP l
         ON t.OrdenId = l.OrdenId AND l.EnviadoExitosamente = 1
-      WHERE t.Estado = 'Pendiente' AND l.id IS NULL
+      WHERE t.Estado = 'Pendiente' 
+        AND DATE(t.\`F.Soli\`) = CURDATE()
+        AND l.id IS NULL
     `);
 
     if (rows.length === 0) {

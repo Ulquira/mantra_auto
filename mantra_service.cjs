@@ -399,7 +399,7 @@ async function runQueueCron() {
       WHERE t.Estado <> 'Pendiente'
     `);
 
-    // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola y cuyo F.Soli corresponda al tramo objetivo
+    // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola, cuyo F.Soli corresponda a HOY y al tramo objetivo
     const queryStr = `
       SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, c.id as colaId, ts.Tipo as CategoriaServicioMantra
       FROM COLA_NOTIFICACIONES_MANTRA c
@@ -407,6 +407,7 @@ async function runQueueCron() {
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
       LEFT JOIN LOG_NOTIFICACIONES_WSP l ON t.OrdenId = l.OrdenId AND l.EnviadoExitosamente = 1
       WHERE TIME(\`F.Soli\`) LIKE ? 
+        AND DATE(t.\`F.Soli\`) = CURDATE()
         AND t.Estado = 'Pendiente'
         AND l.id IS NULL
       ORDER BY c.id ASC LIMIT 50
