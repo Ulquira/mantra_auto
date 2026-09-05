@@ -13,10 +13,10 @@ async function run() {
 
     console.log('Actualizando tabla Testmantra para la prueba...');
     
-    // 1. Cambiamos el estado a "Agendada", fecha de solicitud a hoy y teléfono 935434175
+    // 1. Cambiamos el estado a "Pendiente", fecha de solicitud a hoy y teléfono 935434175
     await conn.query(`
       UPDATE Testmantra 
-      SET Estado = 'Agendada', TeleMovilNume = '935434175', \`F.Soli\` = NOW()
+      SET Estado = 'Pendiente', TeleMovilNume = '935434175', \`F.Soli\` = NOW()
     `);
 
     // 2. Limpiamos cualquier log de pruebas anteriores
@@ -29,8 +29,9 @@ async function run() {
       )
     `);
     await conn.query('TRUNCATE TABLE LOG_NOTIFICACIONES_WSP');
+    await conn.query('TRUNCATE TABLE COLA_NOTIFICACIONES_MANTRA');
 
-    console.log('¡Entorno listo! Orden pasada a "Agendada" con el teléfono 935434175.');
+    console.log('¡Entorno listo! Orden pasada a "Pendiente" con el teléfono 935434175.');
     await conn.end();
   } catch (err) {
     console.error('Error:', err.message);

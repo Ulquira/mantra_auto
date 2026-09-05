@@ -33,14 +33,14 @@ app.post('/webhook/estado-cambiado', async (req, res) => {
     });
   }
 
-  // Si se envía el estado y no es 'Agendada' ni 'Pendiente', omitir
-  if (estado && estado !== 'Agendada' && estado !== 'Pendiente') {
+  // Solo procesar si el estado es 'Pendiente'
+  if (estado && estado !== 'Pendiente') {
     return res.status(200).json({
-      message: `La orden ${ordenId} cambió al estado '${estado}'. No requiere notificación por WhatsApp.`
+      message: `La orden ${ordenId} cambió al estado '${estado}'. No requiere notificación por WhatsApp (solo se notifica en 'Pendiente').`
     });
   }
 
-  console.log(`\n[WEBHOOK] Evento recibido para la orden ${ordenId} (Estado: ${estado || 'Agendada'})`);
+  console.log(`\n[WEBHOOK] Evento recibido para la orden ${ordenId} (Estado: ${estado || 'Pendiente'})`);
 
   try {
     const result = await processOrderById(ordenId);

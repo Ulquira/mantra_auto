@@ -8,19 +8,19 @@ async function runCron() {
   try {
     await ensureLogTableExists(conn);
 
-    // 1. Procesamiento de Nuevas Órdenes Agendadas
-    console.log("--- Procesando Órdenes Agendadas ---");
+    // 1. Procesamiento de Nuevas Órdenes Pendientes (Solo Pendiente y sin notificación previa)
+    console.log("--- Procesando Órdenes Pendientes ---");
     const [rows] = await conn.query(`
       SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
       FROM Testmantra t
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
       LEFT JOIN LOG_NOTIFICACIONES_WSP l
-        ON t.OrdenId = l.OrdenId AND l.EstadoNotificado = t.Estado
-      WHERE t.Estado IN ('Agendada', 'Pendiente') AND l.id IS NULL
+        ON t.OrdenId = l.OrdenId AND l.EnviadoExitosamente = 1
+      WHERE t.Estado = 'Pendiente' AND l.id IS NULL
     `);
 
     if (rows.length === 0) {
-      console.log("✔ No hay órdenes nuevas en estado 'Agendada' o 'Pendiente' pendientes de notificar.");
+      console.log("✔ No hay órdenes nuevas en estado 'Pendiente' pendientes de notificar.");
     } else {
       console.log(`Encontradas ${rows.length} órden(es) pendientes de notificación.`);
       
@@ -33,7 +33,7 @@ async function runCron() {
         );
 
         if (result.success) {
-          console.log(`✔ Log guardado exitosamente. No se volverá a notificar la orden ${row.OrdenId} por este estado.`);
+          console.log(`✔ Log guardado exitosamente. No se volverá a notificar la orden ${row.OrdenId}.`);
         } else {
           console.log(`❌ Orden ${row.OrdenId} falló. El error se ha guardado en el log de la BD para revisión.`);
         }
@@ -48,8 +48,8 @@ async function runCron() {
       JOIN Testmantra t ON r.token = t.token
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
       LEFT JOIN LOG_NOTIFICACIONES_WSP l
-        ON l.OrdenId = r.id AND l.EstadoNotificado = 'Reprogramacion'
-      WHERE t.Estado IN ('Agendada', 'Pendiente') AND l.id IS NULL
+        ON l.OrdenId = r.id AND l.EstadoNotificado = 'Reprogramacion' AND l.EnviadoExitosamente = 1
+      WHERE l.id IS NULL
     `);
 
     if (reprogs.length === 0) {

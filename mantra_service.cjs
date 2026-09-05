@@ -336,13 +336,13 @@ async function processOrderById(ordenId) {
       FROM Testmantra t
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
       LEFT JOIN LOG_NOTIFICACIONES_WSP l ON t.OrdenId = l.OrdenId AND l.EnviadoExitosamente = 1
-      WHERE t.OrdenId = ? AND l.id IS NULL
+      WHERE t.OrdenId = ? AND t.Estado = 'Pendiente' AND l.id IS NULL
     `, [ordenId]);
 
     if (rows.length === 0) {
       return {
         success: false,
-        message: `La orden ${ordenId} no existe en Testmantra o ya fue notificada previamente.`
+        message: `La orden ${ordenId} no está en estado 'Pendiente' o ya fue notificada previamente.`
       };
     }
 
@@ -360,60 +360,6 @@ async function processOrderById(ordenId) {
       estado: row.Estado,
       errorDetail: result.errorDetail
     };
-  } finally {
-    await conn.end();
-  }
-}
-
-async function runCron(filterMode = 'ALL') {
-  const modeLabel = filterMode === 'NEXT_DAY' ? 'DÍA SIGUIENTE' : filterMode === 'SAME_DAY' ? 'MISMO DÍA' : 'TODOS';
-  console.log(`\n[CRON ${new Date().toISOString()}] Ejecutando escaneo periódico (${modeLabel})...`);
-  
-  const conn = await getDbConnection();
-
-  try {
-    await ensureLogTableExists(conn);
-
-    let dateCondition = "";
-    if (filterMode === 'NEXT_DAY') {
-      dateCondition = " AND DATE(t.`F.Soli`) = DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
-    } else if (filterMode === 'SAME_DAY') {
-      dateCondition = " AND DATE(t.`F.Soli`) = CURDATE()";
-    }
-
-    const queryStr = `
-      SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
-      FROM Testmantra t
-      LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
-      LEFT JOIN LOG_NOTIFICACIONES_WSP l
-        ON t.OrdenId = l.OrdenId AND l.EstadoNotificado = t.Estado
-      WHERE t.Estado = 'Agendada' AND l.id IS NULL ${dateCondition}
-    `;
-
-    const [rows] = await conn.query(queryStr);
-
-    if (rows.length === 0) {
-      console.log(`✔ No hay órdenes pendientes en estado 'Agendada' para la condición [${modeLabel}].`);
-    } else {
-      console.log(`Encontradas ${rows.length} órden(es) pendientes de notificación [${modeLabel}].`);
-      
-      for (const row of rows) {
-        const result = await sendMantraNotification(row);
-        
-        await conn.query(
-          'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?)',
-          [row.OrdenId, row.Estado, result.success, result.errorDetail]
-        );
-
-        if (result.success) {
-          console.log(`✔ Log guardado exitosamente. No se volverá a notificar la orden ${row.OrdenId} por este estado.`);
-        } else {
-          console.log(`❌ Orden ${row.OrdenId} falló. El error se ha guardado en el log de la BD para revisión.`);
-        }
-      }
-    }
-  } catch (err) {
-    console.error("❌ Error durante la ejecución del cron:", err.message);
   } finally {
     await conn.end();
   }
@@ -503,6 +449,5 @@ module.exports = {
   sendMantraNotification,
   sendReprogramacionNotification,
   processOrderById,
-  runCron,
   runQueueCron
 };
