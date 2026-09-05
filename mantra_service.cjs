@@ -335,13 +335,14 @@ async function processOrderById(ordenId) {
       SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
       FROM Testmantra t
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
-      WHERE t.OrdenId = ?
+      LEFT JOIN LOG_NOTIFICACIONES_WSP l ON t.OrdenId = l.OrdenId AND l.EnviadoExitosamente = 1
+      WHERE t.OrdenId = ? AND l.id IS NULL
     `, [ordenId]);
 
     if (rows.length === 0) {
       return {
         success: false,
-        message: `La orden ${ordenId} no existe en Testmantra.`
+        message: `La orden ${ordenId} no existe en Testmantra o ya fue notificada previamente.`
       };
     }
 
@@ -458,8 +459,10 @@ async function runQueueCron() {
       FROM COLA_NOTIFICACIONES_MANTRA c
       INNER JOIN Testmantra t ON c.ordenId = t.OrdenId
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
+      LEFT JOIN LOG_NOTIFICACIONES_WSP l ON t.OrdenId = l.OrdenId AND l.EnviadoExitosamente = 1
       WHERE TIME(\`F.Soli\`) LIKE ? 
         AND t.Estado IN ('Agendada', 'Pendiente')
+        AND l.id IS NULL
       ORDER BY c.id ASC LIMIT 50
     `;
     const searchPattern = `${tramoFiltro}%`;
