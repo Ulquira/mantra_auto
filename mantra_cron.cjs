@@ -29,11 +29,13 @@ async function runCron() {
     } else {
       console.log(`--- Procesando Órdenes de HOY del Tramo [${tramoFiltro}:00] (SOLO AVERIAS) ---`);
       const [rows] = await pool.query(`
-        SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
+        SELECT t.*, DATE(t.\`F.Soli\`) as f_date, TIME(t.\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
         FROM ${MAIN_TABLE} t
         INNER JOIN TipoServicio ts ON t.Producto = ts.Servicio
-        LEFT JOIN LOG_NOTIFICACIONES_WSP l
-          ON t.OrdenId = l.OrdenId AND l.EstadoNotificado = t.Estado
+        LEFT JOIN LOG_NOTIFICACIONES_WSP l ON (
+          t.OrdenId = l.OrdenId
+          OR (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
+        ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
         WHERE ts.Tipo = 'AVERIAS'
           AND t.Estado IN ('Agendada', 'Pendiente')
           AND DATE(t.\`F.Soli\`) = CURDATE()
@@ -51,12 +53,12 @@ async function runCron() {
           const result = await sendMantraNotification(row);
           
           await pool.query(
-            'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?)',
-            [row.OrdenId, row.Estado, result.success, result.errorDetail]
+            'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
+            [row.OrdenId, row.CodiSegui || null, row.Estado, result.success, result.errorDetail]
           );
 
           if (result.success && !result.skipped) {
-            console.log(`✔ Log guardado exitosamente. No se volverá a notificar la orden ${row.OrdenId} por este estado.`);
+            console.log(`✔ Log guardado exitosamente. No se volverá a notificar la orden ${row.OrdenId} (Ticket: ${row.CodiSegui}) hoy.`);
           } else if (result.skipped) {
             console.log(`- Orden ${row.OrdenId} omitida (${result.errorDetail}).`);
           } else {
@@ -74,7 +76,7 @@ async function runCron() {
       JOIN ${MAIN_TABLE} t ON r.token = t.token
       INNER JOIN TipoServicio ts ON t.Producto = ts.Servicio
       LEFT JOIN LOG_NOTIFICACIONES_WSP l
-        ON l.OrdenId = r.id AND l.EstadoNotificado = 'Reprogramacion'
+        ON l.OrdenId = r.id AND l.EstadoNotificado = 'Reprogramacion' AND l.EnviadoExitosamente = 1
       WHERE ts.Tipo = 'AVERIAS'
         AND t.Estado IN ('Agendada', 'Pendiente')
         AND DATE(r.fecha_solicitada) >= CURDATE()
@@ -107,8 +109,8 @@ async function runCron() {
         
         // Guardamos en el log usando el ID de la reprogramación como OrdenId para no chocar con los logs normales
         await pool.query(
-          'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?)',
-          [reprog.id, 'Reprogramacion', result.success, result.errorDetail]
+          'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
+          [reprog.id, reprog.CodiSegui || null, 'Reprogramacion', result.success, result.errorDetail]
         );
 
         if (result.success && !result.skipped) {

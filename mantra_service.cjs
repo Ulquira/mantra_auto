@@ -329,16 +329,22 @@ async function processOrderById(ordenId) {
     await ensureLogTableExists(pool);
 
     const [rows] = await pool.query(`
-      SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
+      SELECT t.*, DATE(t.\`F.Soli\`) as f_date, TIME(t.\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
       FROM ${MAIN_TABLE} t
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
-      WHERE t.OrdenId = ?
+      LEFT JOIN LOG_NOTIFICACIONES_WSP l ON (
+        t.OrdenId = l.OrdenId
+        OR (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
+      ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
+      WHERE t.OrdenId = ? 
+        AND t.Estado IN ('Agendada', 'Pendiente')
+        AND l.id IS NULL
     `, [ordenId]);
 
     if (rows.length === 0) {
       return {
         success: false,
-        message: `La orden ${ordenId} no existe en ${MAIN_TABLE}.`
+        message: `La orden ${ordenId} no es elegible o ya fue notificada hoy.`
       };
     }
 
@@ -346,8 +352,8 @@ async function processOrderById(ordenId) {
     const result = await sendMantraNotification(row);
 
     await pool.query(
-      'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?)',
-      [row.OrdenId, row.Estado, result.success, result.errorDetail]
+      'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
+      [row.OrdenId, row.CodiSegui || null, row.Estado, result.success, result.errorDetail]
     );
 
     return {
@@ -359,59 +365,6 @@ async function processOrderById(ordenId) {
   } catch (err) {
     console.error(`❌ Error en processOrderById(${ordenId}):`, err.message);
     return { success: false, errorDetail: err.message };
-  }
-}
-
-async function runCron(filterMode = 'ALL') {
-  const modeLabel = filterMode === 'NEXT_DAY' ? 'DÍA SIGUIENTE' : filterMode === 'SAME_DAY' ? 'MISMO DÍA' : 'TODOS';
-  console.log(`\n[CRON ${new Date().toISOString()}] Ejecutando escaneo periódico (${modeLabel})...`);
-
-  try {
-    await ensureLogTableExists(pool);
-
-    let dateCondition = " AND DATE(t.`F.Soli`) = CURDATE()";
-    if (filterMode === 'NEXT_DAY') {
-      dateCondition = " AND DATE(t.`F.Soli`) = DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
-    } else if (filterMode === 'SAME_DAY') {
-      dateCondition = " AND DATE(t.`F.Soli`) = CURDATE()";
-    }
-
-    const queryStr = `
-      SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
-      FROM ${MAIN_TABLE} t
-      INNER JOIN TipoServicio ts ON t.Producto = ts.Servicio
-      LEFT JOIN LOG_NOTIFICACIONES_WSP l
-        ON t.OrdenId = l.OrdenId AND l.EstadoNotificado = t.Estado
-      WHERE ts.Tipo = 'AVERIAS'
-        AND t.Estado IN ('Agendada', 'Pendiente')
-        AND l.id IS NULL ${dateCondition}
-      LIMIT 50
-    `;
-
-    const [rows] = await pool.query(queryStr);
-
-    if (rows.length === 0) {
-      console.log(`✔ No hay órdenes pendientes en estado 'Agendada' o 'Pendiente' para la condición [${modeLabel}].`);
-    } else {
-      console.log(`Encontradas ${rows.length} órden(es) pendientes de notificación [${modeLabel}].`);
-      
-      for (const row of rows) {
-        const result = await sendMantraNotification(row);
-        
-        await pool.query(
-          'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?)',
-          [row.OrdenId, row.Estado, result.success, result.errorDetail]
-        );
-
-        if (result.success) {
-          console.log(`✔ Log guardado exitosamente. No se volverá a notificar la orden ${row.OrdenId} por este estado.`);
-        } else {
-          console.log(`❌ Orden ${row.OrdenId} falló. El error se ha guardado en el log de la BD para revisión.`);
-        }
-      }
-    }
-  } catch (err) {
-    console.error("❌ Error durante la ejecución del cron:", err.message);
   }
 }
 
@@ -440,23 +393,36 @@ async function runQueueCron() {
       return;
     }
 
-    // 2.1 Limpieza automática de la cola: descartar IDs cuyas fechas no sean HOY o cuyo producto NO sea 'AVERIAS'
+    // 2.1 Limpieza automática de la cola: descartar IDs cuyas fechas no sean HOY, no sean 'AVERIAS' o ya fueron notificados HOY
     await pool.query(`
       DELETE c FROM COLA_NOTIFICACIONES_MANTRA c
       LEFT JOIN ${MAIN_TABLE} t ON c.ordenId = t.OrdenId
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
-      WHERE DATE(t.\`F.Soli\`) <> CURDATE() OR ts.Tipo <> 'AVERIAS' OR ts.Tipo IS NULL
+      LEFT JOIN LOG_NOTIFICACIONES_WSP l ON (
+        t.OrdenId = l.OrdenId
+        OR (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
+      ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
+      WHERE DATE(t.\`F.Soli\`) <> CURDATE() 
+         OR ts.Tipo <> 'AVERIAS' 
+         OR ts.Tipo IS NULL
+         OR l.id IS NOT NULL
     `);
 
-    // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola, sean de HOY, correspondan al tramo y sean estrictamente 'AVERIAS'
+    // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola, sean de HOY, correspondan al tramo, sean 'AVERIAS' y no tengan envío HOY
     const queryStr = `
-      SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, c.id as colaId, ts.Tipo as CategoriaServicioMantra
+      SELECT t.*, DATE(t.\`F.Soli\`) as f_date, TIME(t.\`F.Soli\`) as f_time, c.id as colaId, ts.Tipo as CategoriaServicioMantra
       FROM COLA_NOTIFICACIONES_MANTRA c
       INNER JOIN ${MAIN_TABLE} t ON c.ordenId = t.OrdenId
       INNER JOIN TipoServicio ts ON t.Producto = ts.Servicio
+      LEFT JOIN LOG_NOTIFICACIONES_WSP l ON (
+        t.OrdenId = l.OrdenId
+        OR (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
+      ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
       WHERE ts.Tipo = 'AVERIAS'
+        AND t.Estado IN ('Agendada', 'Pendiente')
         AND DATE(t.\`F.Soli\`) = CURDATE() 
         AND TIME(t.\`F.Soli\`) LIKE ? 
+        AND l.id IS NULL
       ORDER BY c.id ASC LIMIT 50
     `;
     const searchPattern = `${tramoFiltro}%`;
@@ -473,8 +439,8 @@ async function runQueueCron() {
       const result = await sendMantraNotification(row);
       
       await pool.query(
-        'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?)',
-        [row.OrdenId, row.Estado, result.success, result.errorDetail]
+        'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
+        [row.OrdenId, row.CodiSegui || null, row.Estado, result.success, result.errorDetail]
       );
 
       // Eliminamos de la cola
@@ -496,6 +462,5 @@ module.exports = {
   sendMantraNotification,
   sendReprogramacionNotification,
   processOrderById,
-  runCron,
   runQueueCron
 };
