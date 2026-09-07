@@ -50,7 +50,7 @@ function extractFirstName(fullName) {
   return clean.split(' ')[0];
 }
 
-// Configuración de Connection Pool (Reutilización y límite estricto de conexiones)
+// Configuración de Connection Pool optimizada (Límite bajo, timeouts agresivos y reciclaje)
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
@@ -58,8 +58,11 @@ const pool = mysql.createPool({
   database: process.env.DB_NAME,
   port: process.env.DB_PORT || 3306,
   waitForConnections: true,
-  connectionLimit: 5,
-  queueLimit: 0,
+  connectionLimit: 3,           // Máximo 3 conexiones simultáneas por instancia
+  maxIdle: 2,                    // Máximo 2 conexiones inactivas en espera
+  idleTimeout: 30000,            // Liberar conexiones inactivas tras 30 segundos
+  connectTimeout: 10000,         // Timeout de conexión 10s
+  queueLimit: 100,               // Límite de solicitudes en cola
   enableKeepAlive: true,
   keepAliveInitialDelay: 10000
 });
@@ -76,6 +79,7 @@ async function ensureLogTableExists(dbOrPool) {
     CREATE TABLE IF NOT EXISTS LOG_NOTIFICACIONES_WSP (
       id INT AUTO_INCREMENT PRIMARY KEY,
       OrdenId INT NOT NULL,
+      CodiSegui VARCHAR(100) NULL,
       EstadoNotificado VARCHAR(50) NOT NULL,
       fecha_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       EnviadoExitosamente BOOLEAN DEFAULT TRUE,
