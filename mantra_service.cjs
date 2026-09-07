@@ -460,6 +460,13 @@ async function runQueueCron() {
       return;
     }
 
+    // 2.1 Limpieza automática de la cola: descartar IDs cuyas fechas ya hayan vencido (días anteriores)
+    await pool.query(`
+      DELETE c FROM COLA_NOTIFICACIONES_MANTRA c
+      INNER JOIN ${MAIN_TABLE} t ON c.ordenId = t.OrdenId
+      WHERE DATE(t.\`F.Soli\`) < CURDATE()
+    `);
+
     // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola y cuyo F.Soli corresponda a HOY y al tramo objetivo
     const queryStr = `
       SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, c.id as colaId, ts.Tipo as CategoriaServicioMantra
