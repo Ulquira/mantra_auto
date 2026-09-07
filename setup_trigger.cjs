@@ -20,35 +20,22 @@ require('dotenv').config();
       )
     `);
 
-    console.log("Borrando triggers antiguos si existen...");
+    console.log("Borrando trigger antiguo si existe...");
     await conn.query(`DROP TRIGGER IF EXISTS trg_testmantra_agendada`);
-    await conn.query(`DROP TRIGGER IF EXISTS trg_testmantra_pendiente_update`);
-    await conn.query(`DROP TRIGGER IF EXISTS trg_testmantra_pendiente_insert`);
 
-    console.log("Creando nuevos triggers para el estado Pendiente...");
+    console.log("Creando nuevo trigger...");
     await conn.query(`
-      CREATE TRIGGER trg_testmantra_pendiente_update 
+      CREATE TRIGGER trg_testmantra_agendada 
       AFTER UPDATE ON Testmantra
       FOR EACH ROW
       BEGIN
-        IF NEW.Estado = 'Pendiente' AND OLD.Estado <> 'Pendiente' THEN
+        IF (NEW.Estado IN ('Agendada', 'Pendiente') AND (OLD.Estado IS NULL OR OLD.Estado NOT IN ('Agendada', 'Pendiente') OR OLD.Estado <> NEW.Estado)) THEN
           INSERT INTO COLA_NOTIFICACIONES_MANTRA (ordenId) VALUES (NEW.OrdenId);
         END IF;
       END;
     `);
 
-    await conn.query(`
-      CREATE TRIGGER trg_testmantra_pendiente_insert 
-      AFTER INSERT ON Testmantra
-      FOR EACH ROW
-      BEGIN
-        IF NEW.Estado = 'Pendiente' THEN
-          INSERT INTO COLA_NOTIFICACIONES_MANTRA (ordenId) VALUES (NEW.OrdenId);
-        END IF;
-      END;
-    `);
-
-    console.log('✅ Cola y Triggers creados exitosamente en MySQL.');
+    console.log('✅ Cola y Trigger creados exitosamente en MySQL.');
     await conn.end();
   } catch (err) {
     console.error('❌ Error:', err.message);

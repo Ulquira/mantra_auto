@@ -2,7 +2,8 @@ process.env.TZ = 'America/Lima';
 
 const express = require('express');
 const cron = require('node-cron');
-const { processOrderById, runQueueCron, runReprogramacionesCron } = require('./mantra_service.cjs');
+const { processOrderById, runQueueCron } = require('./mantra_service.cjs');
+const { runCron } = require('./mantra_cron.cjs');
 require('dotenv').config();
 
 const app = express();
@@ -10,17 +11,17 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// 1. Cron de Cola de Órdenes Pendientes (se ejecuta cada 30 segundos)
+// Nuevo Cron basado en Cola (se ejecuta cada 30 segundos)
 cron.schedule('*/30 * * * * *', async () => {
   await runQueueCron();
 });
 console.log(`⏰ Cron [Cola Eventos] activado. Escaneando la cola cada 30 segundos...`);
 
-// 2. Cron de Reprogramaciones (se ejecuta cada minuto)
+// Cron de monitoreo de Testmantra y Reprogramaciones (se ejecuta cada minuto)
 cron.schedule('* * * * *', async () => {
-  await runReprogramacionesCron();
+  await runCron();
 });
-console.log(`⏰ Cron [Reprogramaciones] activado. Escaneando reprogramaciones cada minuto...`);
+console.log(`⏰ Cron [Monitoreo General] activado. Escaneando tablas cada minuto...`);
 
 // Endpoint Webhook para recibir notificaciones por evento/cambio de estado
 app.post('/webhook/estado-cambiado', async (req, res) => {
@@ -32,14 +33,14 @@ app.post('/webhook/estado-cambiado', async (req, res) => {
     });
   }
 
-  // Solo procesar si el estado es 'Pendiente' o 'Agendada'
-  if (estado && estado !== 'Pendiente' && estado !== 'Agendada') {
+  // Si se envía el estado y no es 'Agendada' ni 'Pendiente', omitir
+  if (estado && estado !== 'Agendada' && estado !== 'Pendiente') {
     return res.status(200).json({
-      message: `La orden ${ordenId} cambió al estado '${estado}'. No requiere notificación por WhatsApp (solo se notifica en 'Pendiente' o 'Agendada').`
+      message: `La orden ${ordenId} cambió al estado '${estado}'. No requiere notificación por WhatsApp.`
     });
   }
 
-  console.log(`\n[WEBHOOK] Evento recibido para la orden ${ordenId} (Estado: ${estado || 'Pendiente/Agendada'})`);
+  console.log(`\n[WEBHOOK] Evento recibido para la orden ${ordenId} (Estado: ${estado || 'Agendada'})`);
 
   try {
     const result = await processOrderById(ordenId);

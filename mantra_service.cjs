@@ -32,22 +32,50 @@ function extractPlanName(idenServi) {
   return idenServi.split('|')[0].trim() || "tu plan Win";
 }
 
-async function getDbConnection() {
-  return await mysql.createConnection({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    port: process.env.DB_PORT || 3306
-  });
+function extractFirstName(fullName) {
+  if (!fullName || typeof fullName !== 'string') return "Cliente";
+  const clean = fullName.trim().replace(/\s+/g, ' ');
+  if (!clean) return "Cliente";
+  
+  // Si viene en formato "APELLIDOS, NOMBRES"
+  if (clean.includes(',')) {
+    const parts = clean.split(',');
+    const nombres = (parts[1] || '').trim();
+    if (nombres) {
+      return nombres.split(' ')[0];
+    }
+  }
+  
+  // Formato normal: "RODRIGO LUIS SANIZ BAZAN" -> "RODRIGO"
+  return clean.split(' ')[0];
 }
 
-async function ensureLogTableExists(conn) {
-  await conn.query(`
+// Configuración de Connection Pool (Reutilización y límite estricto de conexiones)
+const pool = mysql.createPool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  port: process.env.DB_PORT || 3306,
+  waitForConnections: true,
+  connectionLimit: 5,
+  queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000
+});
+
+const MAIN_TABLE = process.env.DB_TABLE || 'vw_winordetraba';
+
+async function getDbConnection() {
+  return pool;
+}
+
+async function ensureLogTableExists(dbOrPool) {
+  const executor = dbOrPool || pool;
+  await executor.query(`
     CREATE TABLE IF NOT EXISTS LOG_NOTIFICACIONES_WSP (
       id INT AUTO_INCREMENT PRIMARY KEY,
       OrdenId INT NOT NULL,
-      CodiSegui VARCHAR(100) NULL,
       EstadoNotificado VARCHAR(50) NOT NULL,
       fecha_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       EnviadoExitosamente BOOLEAN DEFAULT TRUE,
@@ -59,7 +87,8 @@ async function ensureLogTableExists(conn) {
 async function sendMantraNotification(orden) {
   const rawPhone = orden.TeleMovilNume || '';
   const phone = rawPhone.replace(/\D/g, '').slice(-9);
-  const name = orden.ClienteFinal;
+  const fullName = orden.ClienteFinal || '';
+  const firstName = extractFirstName(fullName);
 
   let fechaFormateada = "fecha por confirmar";
   if (orden.f_date) {
@@ -78,35 +107,28 @@ async function sendMantraNotification(orden) {
   }
 
   console.log(`\n=================================================`);
-  console.log(`Procesando Orden: ${orden.OrdenId} - ${name} (${phone})`);
+  console.log(`Procesando Orden: ${orden.OrdenId} - ${firstName} (${phone}) [Nombre completo: ${fullName}]`);
   console.log(`=================================================`);
 
-  // Cruce de datos real utilizando el resultado del LEFT JOIN con tiposervicio
+  // Cruce de datos basado en TipoServicioBD
   let tipoServicio = 'Instalacion';
-  const tipoServicioBD = (orden.TipoServicioBD || '').toUpperCase();
+  const categoria = (orden.CategoriaServicioMantra || '').toUpperCase();
 
-  if (tipoServicioBD === 'NO') {
+  if (categoria === 'NO') {
     console.log(`[SKIP] El producto no requiere notificación (Tipo = NO).`);
     return { success: true, skipped: true, errorDetail: 'El producto no requiere notificación (Tipo = NO).' };
-  } else if (tipoServicioBD === 'AVERIAS' || tipoServicioBD === 'POSTVENTA') {
+  } else if (categoria === 'AVERIAS' || categoria === 'POSTVENTA') {
     tipoServicio = 'Averias';
-  } else if (tipoServicioBD === 'INSTALACION' || tipoServicioBD === 'PROVINCIA') {
+  } else if (categoria === 'INSTALACION' || categoria === 'PROVINCIA') {
     tipoServicio = 'Instalacion';
   } else {
-    // Fallback de seguridad estricto por si la tabla tiposervicio no tiene mapeado el producto
+    // Fallback si no está mapeado en la tabla TipoServicio
     const tipoOrden = (orden.TipoOrden || '').toLowerCase();
     const producto = (orden.Producto || '').toLowerCase();
     if (tipoOrden.includes('averia') || tipoOrden.includes('visita') || producto.includes('averia')) {
       tipoServicio = 'Averias';
     }
   }
-
-  // --- MVP OVERRIDE: Apagar temporalmente el envío para INSTALACIONES ---
-  if (tipoServicio === 'Instalacion') {
-    console.log(`[MVP SKIP] Orden ${orden.OrdenId} corresponde a 'Instalacion'. El envío está apagado temporalmente para el MVP.`);
-    return { success: true, skipped: true, errorDetail: 'Skipped: Instalaciones desactivadas para el MVP.' };
-  }
-  // ------------------------------------------------------------------------
 
   const credentials = MANTRA_CONFIG[tipoServicio];
   const sectorOperativo = (orden['Sector Operativo'] || '').toUpperCase();
@@ -120,7 +142,7 @@ async function sendMantraNotification(orden) {
     const ticket = orden.CodiSegui ? String(orden.CodiSegui).trim() : String(orden.OrdenId);
     const direccion = orden.Direccion ? orden.Direccion.split('||')[0].trim() : "";
     customData = {
-      name: name,
+      name: firstName,
       phone: phone,
       countryCode: "51",
       custom_1: ticket,
@@ -129,12 +151,12 @@ async function sendMantraNotification(orden) {
       custom_4: direccion,
       custom_5: trackingLink,
       custom_6: trackingLink,
-      custom_7: name,
+      custom_7: firstName,
       custom_10: trackingLink
     };
   } else {
     customData = {
-      name: name,
+      name: firstName,
       phone: phone,
       countryCode: "51",
       custom_1: fechaFormateada,
@@ -142,7 +164,7 @@ async function sendMantraNotification(orden) {
       custom_3: extractPlanName(orden.IdenServi),
       custom_5: trackingLink,
       custom_6: trackingLink,
-      custom_7: name,
+      custom_7: firstName,
       custom_10: trackingLink
     };
   }
@@ -197,7 +219,8 @@ async function sendMantraNotification(orden) {
 async function sendReprogramacionNotification(reprog, orden) {
   const rawPhone = orden.TeleMovilNume || '';
   const phone = rawPhone.replace(/\D/g, '').slice(-9);
-  const name = orden.ClienteFinal;
+  const fullName = orden.ClienteFinal || '';
+  const firstName = extractFirstName(fullName);
 
   // Formateo de fecha según reprogramaciones.fecha_solicitada
   let fechaFormateada = "fecha por confirmar";
@@ -210,32 +233,28 @@ async function sendReprogramacionNotification(reprog, orden) {
   const rangoHorario = reprog.turno || "horario por confirmar";
 
   console.log(`\n=================================================`);
-  console.log(`Procesando Reprogramación ID: ${reprog.id} | Orden: ${orden.OrdenId} - ${name} (${phone})`);
+  console.log(`Procesando Reprogramación ID: ${reprog.id} | Orden: ${orden.OrdenId} - ${firstName} (${phone}) [Nombre completo: ${fullName}]`);
   console.log(`=================================================`);
 
-  // Cruce de datos real utilizando el resultado del LEFT JOIN con tiposervicio (para Reprogramaciones)
-  let tipoServicio = 'Desconocido';
-  const tipoServicioBD = (orden.CategoriaServicioMantra || '').toUpperCase();
+  // Evaluamos tipo de servicio basado en tabla TipoServicio
+  let tipoServicio = 'Instalacion';
+  const categoria = (orden.CategoriaServicioMantra || '').toUpperCase();
 
-  if (tipoServicioBD === 'AVERIAS') {
+  if (categoria === 'NO') {
+    console.log(`[SKIP] El producto no requiere notificación de reprogramación (Tipo = NO).`);
+    return { success: true, skipped: true, errorDetail: 'El producto no requiere notificación (Tipo = NO).' };
+  } else if (categoria === 'AVERIAS' || categoria === 'POSTVENTA') {
     tipoServicio = 'Averias';
+  } else if (categoria === 'INSTALACION' || categoria === 'PROVINCIA') {
+    tipoServicio = 'Instalacion';
   } else {
-    // Fallback de seguridad
+    // Fallback si no está mapeado
     const tipoOrden = (orden.TipoOrden || '').toLowerCase();
     const producto = (orden.Producto || '').toLowerCase();
     if (tipoOrden.includes('averia') || tipoOrden.includes('visita') || producto.includes('averia')) {
       tipoServicio = 'Averias';
-    } else {
-      tipoServicio = 'Instalacion_u_Otros';
     }
   }
-
-  // --- MVP OVERRIDE REPROG: Apagar envíos EXCEPTO para AVERIAS ---
-  if (tipoServicio !== 'Averias') {
-    console.log(`[MVP SKIP] Reprogramación de Orden ${orden.OrdenId} corresponde a '${tipoServicioBD}'. El envío está apagado temporalmente para el MVP.`);
-    return { success: true, skipped: true, errorDetail: 'Skipped: Solo Averías activas para el MVP.' };
-  }
-  // ------------------------------------------------------------------------
 
   const credentials = MANTRA_CONFIG[tipoServicio];
   
@@ -253,21 +272,21 @@ async function sendReprogramacionNotification(reprog, orden) {
     const ticket = orden.CodiSegui ? String(orden.CodiSegui).trim() : String(orden.OrdenId);
     const direccion = orden.Direccion ? orden.Direccion.split('||')[0].trim() : "";
     customData = {
-      name: name,
+      name: firstName,
       phone: phone,
       countryCode: "51",
-      custom_1: ticket,
-      custom_2: fechaFormateada,
-      custom_3: rangoHorario,
+      custom_1: fechaFormateada,
+      custom_2: rangoHorario,
+      custom_3: ticket,
       custom_4: direccion,
       custom_5: trackingLink,
       custom_6: trackingLink,
-      custom_7: name,
+      custom_7: firstName,
       custom_10: trackingLink
     };
   } else {
     customData = {
-      name: name,
+      name: firstName,
       phone: phone,
       countryCode: "51",
       custom_1: fechaFormateada,
@@ -275,7 +294,7 @@ async function sendReprogramacionNotification(reprog, orden) {
       custom_3: extractPlanName(orden.IdenServi),
       custom_5: trackingLink,
       custom_6: trackingLink,
-      custom_7: name,
+      custom_7: firstName,
       custom_10: trackingLink
     };
   }
@@ -328,34 +347,29 @@ async function sendReprogramacionNotification(reprog, orden) {
 }
 
 async function processOrderById(ordenId) {
-  const conn = await getDbConnection();
   try {
-    await ensureLogTableExists(conn);
+    await ensureLogTableExists(pool);
 
-    const [rows] = await conn.query(`
+    const [rows] = await pool.query(`
       SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
-      FROM vw_winordetraba t
+      FROM ${MAIN_TABLE} t
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
-      LEFT JOIN LOG_NOTIFICACIONES_WSP l ON (
-        (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
-        OR t.OrdenId = l.OrdenId
-      ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
-      WHERE t.OrdenId = ? AND t.Estado IN ('Pendiente', 'Agendada') AND l.id IS NULL
+      WHERE t.OrdenId = ?
     `, [ordenId]);
 
     if (rows.length === 0) {
       return {
         success: false,
-        message: `La orden ${ordenId} no está en estado 'Pendiente' ni 'Agendada', o ya fue notificada previamente hoy.`
+        message: `La orden ${ordenId} no existe en ${MAIN_TABLE}.`
       };
     }
 
     const row = rows[0];
     const result = await sendMantraNotification(row);
 
-    await conn.query(
-      'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
-      [row.OrdenId, row.CodiSegui || null, row.Estado, result.success, result.errorDetail]
+    await pool.query(
+      'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?)',
+      [row.OrdenId, row.Estado, result.success, result.errorDetail]
     );
 
     return {
@@ -364,13 +378,72 @@ async function processOrderById(ordenId) {
       estado: row.Estado,
       errorDetail: result.errorDetail
     };
-  } finally {
-    await conn.end();
+  } catch (err) {
+    console.error(`❌ Error en processOrderById(${ordenId}):`, err.message);
+    return { success: false, errorDetail: err.message };
   }
 }
 
+async function runCron(filterMode = 'ALL') {
+  const modeLabel = filterMode === 'NEXT_DAY' ? 'DÍA SIGUIENTE' : filterMode === 'SAME_DAY' ? 'MISMO DÍA' : 'TODOS';
+  console.log(`\n[CRON ${new Date().toISOString()}] Ejecutando escaneo periódico (${modeLabel})...`);
+
+  try {
+    await ensureLogTableExists(pool);
+
+    let dateCondition = "";
+    if (filterMode === 'NEXT_DAY') {
+      dateCondition = " AND DATE(t.`F.Soli`) = DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
+    } else if (filterMode === 'SAME_DAY') {
+      dateCondition = " AND DATE(t.`F.Soli`) = CURDATE()";
+    }
+
+    const queryStr = `
+      SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
+      FROM ${MAIN_TABLE} t
+      LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
+      LEFT JOIN LOG_NOTIFICACIONES_WSP l
+        ON t.OrdenId = l.OrdenId AND l.EstadoNotificado = t.Estado
+      WHERE t.Estado IN ('Agendada', 'Pendiente') AND l.id IS NULL ${dateCondition}
+      LIMIT 50
+    `;
+
+    const [rows] = await pool.query(queryStr);
+
+    if (rows.length === 0) {
+      console.log(`✔ No hay órdenes pendientes en estado 'Agendada' o 'Pendiente' para la condición [${modeLabel}].`);
+    } else {
+      console.log(`Encontradas ${rows.length} órden(es) pendientes de notificación [${modeLabel}].`);
+      
+      for (const row of rows) {
+        const result = await sendMantraNotification(row);
+        
+        await pool.query(
+          'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?)',
+          [row.OrdenId, row.Estado, result.success, result.errorDetail]
+        );
+
+        if (result.success) {
+          console.log(`✔ Log guardado exitosamente. No se volverá a notificar la orden ${row.OrdenId} por este estado.`);
+        } else {
+          console.log(`❌ Orden ${row.OrdenId} falló. El error se ha guardado en el log de la BD para revisión.`);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("❌ Error durante la ejecución del cron:", err.message);
+  }
+}
+
+let isQueueCronRunning = false;
+
 async function runQueueCron() {
-  const conn = await getDbConnection();
+  if (isQueueCronRunning) {
+    console.log('[QUEUE] Ejecución anterior aún en curso. Omitiendo ciclo...');
+    return;
+  }
+  isQueueCronRunning = true;
+
   try {
     // 1. Validar la hora actual en zona horaria America/Lima
     const options = { timeZone: 'America/Lima', hour12: false, hour: 'numeric' };
@@ -384,141 +457,55 @@ async function runQueueCron() {
     else if (horaActual >= 15 && horaActual <= 17) tramoFiltro = '16';
 
     if (!tramoFiltro) {
-      // Fuera de las ventanas permitidas, no procesamos la cola, cerramos la conexión
-      await conn.end();
       return;
     }
 
-    // 2.5 Limpieza de Zombies en la Cola
-    // Eliminamos de la cola órdenes cuyo Ticket (CodiSegui) u OrdenId ya fue notificado exitosamente HOY
-    await conn.query(`
-      DELETE c FROM COLA_NOTIFICACIONES_MANTRA c
-      INNER JOIN vw_winordetraba t ON c.ordenId = t.OrdenId
-      INNER JOIN LOG_NOTIFICACIONES_WSP l ON (
-        (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
-        OR t.OrdenId = l.OrdenId
-      ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
-    `);
-    // Eliminamos de la cola órdenes cuyo estado actual ya no es Pendiente ni Agendada
-    await conn.query(`
-      DELETE c FROM COLA_NOTIFICACIONES_MANTRA c
-      INNER JOIN vw_winordetraba t ON c.ordenId = t.OrdenId
-      WHERE t.Estado NOT IN ('Pendiente', 'Agendada')
-    `);
-
-    // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola, cuyo F.Soli corresponda a HOY y al tramo objetivo
+    // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola y cuyo F.Soli corresponda al tramo objetivo
     const queryStr = `
       SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, c.id as colaId, ts.Tipo as CategoriaServicioMantra
       FROM COLA_NOTIFICACIONES_MANTRA c
-      INNER JOIN vw_winordetraba t ON c.ordenId = t.OrdenId
+      INNER JOIN ${MAIN_TABLE} t ON c.ordenId = t.OrdenId
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
-      LEFT JOIN LOG_NOTIFICACIONES_WSP l ON (
-        (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
-        OR t.OrdenId = l.OrdenId
-      ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
       WHERE TIME(\`F.Soli\`) LIKE ? 
-        AND DATE(t.\`F.Soli\`) = CURDATE()
-        AND t.Estado IN ('Pendiente', 'Agendada')
-        AND l.id IS NULL
       ORDER BY c.id ASC LIMIT 50
     `;
     const searchPattern = `${tramoFiltro}%`;
 
-    const [rows] = await conn.query(queryStr, [searchPattern]);
+    const [rows] = await pool.query(queryStr, [searchPattern]);
     
     if (rows.length === 0) {
-      await conn.end();
       return;
     }
 
-    console.log(`[QUEUE] Evaluando Tramo Horario [${tramoFiltro}:00]. Procesando ${rows.length} órdenes en cola.`);
+    console.log(`[QUEUE] Evaluando Tramo Horario [${tramoFiltro}:00]. Procesando ${rows.length} órdenes en cola desde ${MAIN_TABLE}.`);
 
     for (const row of rows) {
       const result = await sendMantraNotification(row);
       
-      await conn.query(
-        'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
-        [row.OrdenId, row.CodiSegui || null, row.Estado, result.success, result.errorDetail]
+      await pool.query(
+        'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?)',
+        [row.OrdenId, row.Estado, result.success, result.errorDetail]
       );
 
-      // Eliminamos siempre de la cola, ya sea éxito o error reportado para no atorarnos
-      await conn.query('DELETE FROM COLA_NOTIFICACIONES_MANTRA WHERE id = ?', [row.colaId]);
-      console.log(`[QUEUE] Orden ${row.OrdenId} eliminada de la cola.`);
+      // Eliminamos de la cola
+      await pool.query('DELETE FROM COLA_NOTIFICACIONES_MANTRA WHERE id = ?', [row.colaId]);
+      console.log(`[QUEUE] Orden ${row.OrdenId} procesada y eliminada de la cola.`);
     }
   } catch (err) {
     console.error("❌ Error en QueueCron:", err.message);
   } finally {
-    if (conn && conn.connection && conn.connection._closing === false) {
-      await conn.end();
-    }
-  }
-}
-
-async function runReprogramacionesCron() {
-  const conn = await getDbConnection();
-  try {
-    await ensureLogTableExists(conn);
-
-    const [reprogs] = await conn.query(`
-      SELECT r.*, t.OrdenId, t.TeleMovilNume, t.ClienteFinal, t.IdenServi, t.TipoOrden, t.Producto, t.\`Sector Operativo\`, t.CodiSegui, t.Direccion, ts.Tipo as CategoriaServicioMantra
-      FROM reprogramaciones r
-      JOIN vw_winordetraba t ON r.token = t.token
-      LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
-      LEFT JOIN LOG_NOTIFICACIONES_WSP l
-        ON l.OrdenId = r.id AND l.EstadoNotificado = 'Reprogramacion' AND l.EnviadoExitosamente = 1
-      WHERE l.id IS NULL
-      ORDER BY r.id ASC LIMIT 20
-    `);
-
-    if (reprogs.length > 0) {
-      console.log(`[REPROG] Encontradas ${reprogs.length} reprogramacion(es) pendiente(s).`);
-      
-      for (const reprog of reprogs) {
-        const ordenContext = {
-          OrdenId: reprog.OrdenId,
-          TeleMovilNume: reprog.TeleMovilNume,
-          ClienteFinal: reprog.ClienteFinal,
-          IdenServi: reprog.IdenServi,
-          token: reprog.token,
-          TipoOrden: reprog.TipoOrden,
-          Producto: reprog.Producto,
-          'Sector Operativo': reprog['Sector Operativo'],
-          CodiSegui: reprog.CodiSegui,
-          Direccion: reprog.Direccion,
-          CategoriaServicioMantra: reprog.CategoriaServicioMantra
-        };
-
-        const result = await sendReprogramacionNotification(reprog, ordenContext);
-        
-        await conn.query(
-          'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
-          [reprog.id, reprog.CodiSegui || null, 'Reprogramacion', result.success, result.errorDetail]
-        );
-
-        if (result.success && !result.skipped) {
-          console.log(`✔ Log de Reprogramación (ID: ${reprog.id}) guardado exitosamente.`);
-        } else if (result.skipped) {
-          console.log(`- Reprogramación (ID: ${reprog.id}) omitida (${result.errorDetail}).`);
-        } else {
-          console.log(`❌ Reprogramación (ID: ${reprog.id}) falló. El error se ha guardado.`);
-        }
-      }
-    }
-  } catch (err) {
-    console.error("❌ Error en ReprogramacionesCron:", err.message);
-  } finally {
-    if (conn && conn.connection && conn.connection._closing === false) {
-      await conn.end();
-    }
+    isQueueCronRunning = false;
   }
 }
 
 module.exports = {
+  pool,
+  MAIN_TABLE,
   getDbConnection,
   ensureLogTableExists,
   sendMantraNotification,
   sendReprogramacionNotification,
   processOrderById,
-  runQueueCron,
-  runReprogramacionesCron
+  runCron,
+  runQueueCron
 };

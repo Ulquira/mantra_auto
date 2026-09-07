@@ -1,43 +1,45 @@
-const { getDbConnection, ensureLogTableExists, sendMantraNotification, sendReprogramacionNotification } = require('./mantra_service.cjs');
+const { pool, MAIN_TABLE, ensureLogTableExists, sendMantraNotification, sendReprogramacionNotification } = require('./mantra_service.cjs');
+
+let isCronRunning = false;
 
 async function runCron() {
-  console.log("Iniciando CRON Job de notificaciones...");
-  
-  const conn = await getDbConnection();
+  if (isCronRunning) {
+    console.log('[CRON] Ejecución de escaneo general anterior en curso. Omitiendo ciclo...');
+    return;
+  }
+  isCronRunning = true;
+  console.log(`Iniciando CRON Job de notificaciones [Tabla: ${MAIN_TABLE}]...`);
 
   try {
-    await ensureLogTableExists(conn);
+    await ensureLogTableExists(pool);
 
-    // 1. Procesamiento de Nuevas Órdenes Pendientes o Agendadas (del MISMO DÍA y sin notificación previa hoy)
-    console.log("--- Procesando Órdenes Pendientes / Agendadas ---");
-    const [rows] = await conn.query(`
+    // 1. Procesamiento de Nuevas Órdenes Agendadas / Pendientes
+    console.log("--- Procesando Órdenes Agendadas / Pendientes ---");
+    const [rows] = await pool.query(`
       SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
-      FROM vw_winordetraba t
+      FROM ${MAIN_TABLE} t
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
-      LEFT JOIN LOG_NOTIFICACIONES_WSP l ON (
-        (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
-        OR t.OrdenId = l.OrdenId
-      ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
-      WHERE t.Estado IN ('Pendiente', 'Agendada') 
-        AND DATE(t.\`F.Soli\`) = CURDATE()
-        AND l.id IS NULL
+      LEFT JOIN LOG_NOTIFICACIONES_WSP l
+        ON t.OrdenId = l.OrdenId AND l.EstadoNotificado = t.Estado
+      WHERE t.Estado IN ('Agendada', 'Pendiente') AND l.id IS NULL
+      LIMIT 50
     `);
 
     if (rows.length === 0) {
-      console.log("✔ No hay órdenes nuevas en estado 'Pendiente' o 'Agendada' pendientes de notificar hoy.");
+      console.log("✔ No hay órdenes nuevas en estado 'Agendada' o 'Pendiente' pendientes de notificar.");
     } else {
       console.log(`Encontradas ${rows.length} órden(es) pendientes de notificación.`);
       
       for (const row of rows) {
         const result = await sendMantraNotification(row);
         
-        await conn.query(
-          'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
-          [row.OrdenId, row.CodiSegui || null, row.Estado, result.success, result.errorDetail]
+        await pool.query(
+          'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?)',
+          [row.OrdenId, row.Estado, result.success, result.errorDetail]
         );
 
         if (result.success) {
-          console.log(`✔ Log guardado exitosamente. No se volverá a notificar la orden ${row.OrdenId} (Ticket: ${row.CodiSegui}) hoy.`);
+          console.log(`✔ Log guardado exitosamente. No se volverá a notificar la orden ${row.OrdenId} por este estado.`);
         } else {
           console.log(`❌ Orden ${row.OrdenId} falló. El error se ha guardado en el log de la BD para revisión.`);
         }
@@ -46,14 +48,15 @@ async function runCron() {
 
     // 2. Procesamiento de Reprogramaciones
     console.log("\n--- Procesando Reprogramaciones ---");
-    const [reprogs] = await conn.query(`
+    const [reprogs] = await pool.query(`
       SELECT r.*, t.OrdenId, t.TeleMovilNume, t.ClienteFinal, t.IdenServi, t.TipoOrden, t.Producto, t.\`Sector Operativo\`, t.CodiSegui, t.Direccion, ts.Tipo as CategoriaServicioMantra
       FROM reprogramaciones r
-      JOIN vw_winordetraba t ON r.token = t.token
+      JOIN ${MAIN_TABLE} t ON r.token = t.token
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
       LEFT JOIN LOG_NOTIFICACIONES_WSP l
-        ON l.OrdenId = r.id AND l.EstadoNotificado = 'Reprogramacion' AND l.EnviadoExitosamente = 1
-      WHERE l.id IS NULL
+        ON l.OrdenId = r.id AND l.EstadoNotificado = 'Reprogramacion'
+      WHERE t.Estado IN ('Agendada', 'Pendiente') AND l.id IS NULL
+      LIMIT 50
     `);
 
     if (reprogs.length === 0) {
@@ -80,9 +83,9 @@ async function runCron() {
         const result = await sendReprogramacionNotification(reprog, ordenContext);
         
         // Guardamos en el log usando el ID de la reprogramación como OrdenId para no chocar con los logs normales
-        await conn.query(
-          'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
-          [reprog.id, reprog.CodiSegui || null, 'Reprogramacion', result.success, result.errorDetail]
+        await pool.query(
+          'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?)',
+          [reprog.id, 'Reprogramacion', result.success, result.errorDetail]
         );
 
         if (result.success && !result.skipped) {
@@ -95,8 +98,10 @@ async function runCron() {
       }
     }
 
+  } catch (err) {
+    console.error("❌ Error en runCron:", err.message);
   } finally {
-    await conn.end();
+    isCronRunning = false;
     console.log("\nProceso finalizado.");
   }
 }
@@ -105,5 +110,7 @@ module.exports = { runCron };
 
 // Permitir ejecutarlo directamente desde la terminal
 if (require.main === module) {
-  runCron();
+  runCron().then(() => {
+    pool.end();
+  });
 }
