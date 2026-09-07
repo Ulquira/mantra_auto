@@ -13,35 +13,52 @@ async function runCron() {
   try {
     await ensureLogTableExists(pool);
 
-    // 1. Procesamiento de Nuevas Órdenes Agendadas / Pendientes
-    console.log("--- Procesando Órdenes Agendadas / Pendientes ---");
-    const [rows] = await pool.query(`
-      SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
-      FROM ${MAIN_TABLE} t
-      LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
-      LEFT JOIN LOG_NOTIFICACIONES_WSP l
-        ON t.OrdenId = l.OrdenId AND l.EstadoNotificado = t.Estado
-      WHERE t.Estado IN ('Agendada', 'Pendiente') AND l.id IS NULL
-      LIMIT 50
-    `);
+    // Determinar tramo activo según la hora de Perú (America/Lima)
+    const options = { timeZone: 'America/Lima', hour12: false, hour: 'numeric' };
+    const formatter = new Intl.DateTimeFormat([], options);
+    const horaActual = parseInt(formatter.format(new Date()), 10);
 
-    if (rows.length === 0) {
-      console.log("✔ No hay órdenes nuevas en estado 'Agendada' o 'Pendiente' pendientes de notificar.");
+    let tramoFiltro = null;
+    if (horaActual >= 7 && horaActual <= 9) tramoFiltro = '08';
+    else if (horaActual >= 11 && horaActual <= 13) tramoFiltro = '12';
+    else if (horaActual >= 15 && horaActual <= 17) tramoFiltro = '16';
+
+    // 1. Procesamiento de Nuevas Órdenes Agendadas / Pendientes del Tramo Activo
+    if (!tramoFiltro) {
+      console.log(`[CRON] Fuera de las ventanas de envío (07-09h, 11-13h, 15-17h). Hora actual: ${horaActual}h. No se procesan nuevos agendamientos.`);
     } else {
-      console.log(`Encontradas ${rows.length} órden(es) pendientes de notificación.`);
-      
-      for (const row of rows) {
-        const result = await sendMantraNotification(row);
-        
-        await pool.query(
-          'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?)',
-          [row.OrdenId, row.Estado, result.success, result.errorDetail]
-        );
+      console.log(`--- Procesando Órdenes de HOY del Tramo [${tramoFiltro}:00] ---`);
+      const [rows] = await pool.query(`
+        SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
+        FROM ${MAIN_TABLE} t
+        LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
+        LEFT JOIN LOG_NOTIFICACIONES_WSP l
+          ON t.OrdenId = l.OrdenId AND l.EstadoNotificado = t.Estado
+        WHERE t.Estado IN ('Agendada', 'Pendiente')
+          AND DATE(t.\`F.Soli\`) = CURDATE()
+          AND TIME(t.\`F.Soli\`) LIKE ?
+          AND l.id IS NULL
+        LIMIT 50
+      `, [`${tramoFiltro}%`]);
 
-        if (result.success) {
-          console.log(`✔ Log guardado exitosamente. No se volverá a notificar la orden ${row.OrdenId} por este estado.`);
-        } else {
-          console.log(`❌ Orden ${row.OrdenId} falló. El error se ha guardado en el log de la BD para revisión.`);
+      if (rows.length === 0) {
+        console.log(`✔ No hay órdenes pendientes de HOY para el tramo [${tramoFiltro}:00].`);
+      } else {
+        console.log(`Encontradas ${rows.length} órden(es) pendientes de notificación para HOY [${tramoFiltro}:00].`);
+        
+        for (const row of rows) {
+          const result = await sendMantraNotification(row);
+          
+          await pool.query(
+            'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?)',
+            [row.OrdenId, row.Estado, result.success, result.errorDetail]
+          );
+
+          if (result.success) {
+            console.log(`✔ Log guardado exitosamente. No se volverá a notificar la orden ${row.OrdenId} por este estado.`);
+          } else {
+            console.log(`❌ Orden ${row.OrdenId} falló. El error se ha guardado en el log de la BD para revisión.`);
+          }
         }
       }
     }
