@@ -8,21 +8,23 @@ async function runCron() {
   try {
     await ensureLogTableExists(conn);
 
-    // 1. Procesamiento de Nuevas Órdenes Pendientes (Solo Pendiente, del MISMO DÍA y sin notificación previa)
+    // 1. Procesamiento de Nuevas Órdenes Pendientes (Solo Pendiente, del MISMO DÍA y sin notificación previa hoy)
     console.log("--- Procesando Órdenes Pendientes ---");
     const [rows] = await conn.query(`
       SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
       FROM Testmantra t
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
-      LEFT JOIN LOG_NOTIFICACIONES_WSP l
-        ON t.OrdenId = l.OrdenId AND l.EnviadoExitosamente = 1
+      LEFT JOIN LOG_NOTIFICACIONES_WSP l ON (
+        (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
+        OR t.OrdenId = l.OrdenId
+      ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
       WHERE t.Estado = 'Pendiente' 
         AND DATE(t.\`F.Soli\`) = CURDATE()
         AND l.id IS NULL
     `);
 
     if (rows.length === 0) {
-      console.log("✔ No hay órdenes nuevas en estado 'Pendiente' pendientes de notificar.");
+      console.log("✔ No hay órdenes nuevas en estado 'Pendiente' pendientes de notificar hoy.");
     } else {
       console.log(`Encontradas ${rows.length} órden(es) pendientes de notificación.`);
       
@@ -30,12 +32,12 @@ async function runCron() {
         const result = await sendMantraNotification(row);
         
         await conn.query(
-          'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?)',
-          [row.OrdenId, row.Estado, result.success, result.errorDetail]
+          'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
+          [row.OrdenId, row.CodiSegui || null, row.Estado, result.success, result.errorDetail]
         );
 
         if (result.success) {
-          console.log(`✔ Log guardado exitosamente. No se volverá a notificar la orden ${row.OrdenId}.`);
+          console.log(`✔ Log guardado exitosamente. No se volverá a notificar la orden ${row.OrdenId} (Ticket: ${row.CodiSegui}) hoy.`);
         } else {
           console.log(`❌ Orden ${row.OrdenId} falló. El error se ha guardado en el log de la BD para revisión.`);
         }
@@ -79,8 +81,8 @@ async function runCron() {
         
         // Guardamos en el log usando el ID de la reprogramación como OrdenId para no chocar con los logs normales
         await conn.query(
-          'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?)',
-          [reprog.id, 'Reprogramacion', result.success, result.errorDetail]
+          'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
+          [reprog.id, reprog.CodiSegui || null, 'Reprogramacion', result.success, result.errorDetail]
         );
 
         if (result.success && !result.skipped) {

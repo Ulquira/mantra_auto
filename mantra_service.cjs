@@ -47,6 +47,7 @@ async function ensureLogTableExists(conn) {
     CREATE TABLE IF NOT EXISTS LOG_NOTIFICACIONES_WSP (
       id INT AUTO_INCREMENT PRIMARY KEY,
       OrdenId INT NOT NULL,
+      CodiSegui VARCHAR(100) NULL,
       EstadoNotificado VARCHAR(50) NOT NULL,
       fecha_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       EnviadoExitosamente BOOLEAN DEFAULT TRUE,
@@ -335,14 +336,17 @@ async function processOrderById(ordenId) {
       SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
       FROM Testmantra t
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
-      LEFT JOIN LOG_NOTIFICACIONES_WSP l ON t.OrdenId = l.OrdenId AND l.EnviadoExitosamente = 1
+      LEFT JOIN LOG_NOTIFICACIONES_WSP l ON (
+        (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
+        OR t.OrdenId = l.OrdenId
+      ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
       WHERE t.OrdenId = ? AND t.Estado = 'Pendiente' AND l.id IS NULL
     `, [ordenId]);
 
     if (rows.length === 0) {
       return {
         success: false,
-        message: `La orden ${ordenId} no está en estado 'Pendiente' o ya fue notificada previamente.`
+        message: `La orden ${ordenId} no está en estado 'Pendiente' o ya fue notificada previamente hoy.`
       };
     }
 
@@ -350,8 +354,8 @@ async function processOrderById(ordenId) {
     const result = await sendMantraNotification(row);
 
     await conn.query(
-      'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?)',
-      [row.OrdenId, row.Estado, result.success, result.errorDetail]
+      'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
+      [row.OrdenId, row.CodiSegui || null, row.Estado, result.success, result.errorDetail]
     );
 
     return {
@@ -386,11 +390,14 @@ async function runQueueCron() {
     }
 
     // 2.5 Limpieza de Zombies en la Cola
-    // Eliminamos de la cola órdenes que ya fueron notificadas exitosamente
+    // Eliminamos de la cola órdenes cuyo Ticket (CodiSegui) u OrdenId ya fue notificado exitosamente HOY
     await conn.query(`
       DELETE c FROM COLA_NOTIFICACIONES_MANTRA c
-      INNER JOIN LOG_NOTIFICACIONES_WSP l ON c.ordenId = l.OrdenId
-      WHERE l.EnviadoExitosamente = 1
+      INNER JOIN Testmantra t ON c.ordenId = t.OrdenId
+      INNER JOIN LOG_NOTIFICACIONES_WSP l ON (
+        (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
+        OR t.OrdenId = l.OrdenId
+      ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
     `);
     // Eliminamos de la cola órdenes cuyo estado actual ya no es Pendiente
     await conn.query(`
@@ -405,7 +412,10 @@ async function runQueueCron() {
       FROM COLA_NOTIFICACIONES_MANTRA c
       INNER JOIN Testmantra t ON c.ordenId = t.OrdenId
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
-      LEFT JOIN LOG_NOTIFICACIONES_WSP l ON t.OrdenId = l.OrdenId AND l.EnviadoExitosamente = 1
+      LEFT JOIN LOG_NOTIFICACIONES_WSP l ON (
+        (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
+        OR t.OrdenId = l.OrdenId
+      ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
       WHERE TIME(\`F.Soli\`) LIKE ? 
         AND DATE(t.\`F.Soli\`) = CURDATE()
         AND t.Estado = 'Pendiente'
@@ -427,8 +437,8 @@ async function runQueueCron() {
       const result = await sendMantraNotification(row);
       
       await conn.query(
-        'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?)',
-        [row.OrdenId, row.Estado, result.success, result.errorDetail]
+        'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
+        [row.OrdenId, row.CodiSegui || null, row.Estado, result.success, result.errorDetail]
       );
 
       // Eliminamos siempre de la cola, ya sea éxito o error reportado para no atorarnos

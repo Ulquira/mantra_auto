@@ -24,6 +24,7 @@ async function run() {
       CREATE TABLE IF NOT EXISTS LOG_NOTIFICACIONES_WSP (
         id INT AUTO_INCREMENT PRIMARY KEY,
         OrdenId INT NOT NULL,
+        CodiSegui VARCHAR(100) NULL,
         EstadoNotificado VARCHAR(50) NOT NULL,
         fecha_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
