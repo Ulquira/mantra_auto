@@ -23,18 +23,19 @@ async function runCron() {
     else if (horaActual >= 11 && horaActual <= 13) tramoFiltro = '12';
     else if (horaActual >= 15 && horaActual <= 17) tramoFiltro = '16';
 
-    // 1. Procesamiento de Nuevas Órdenes Agendadas / Pendientes del Tramo Activo
+    // 1. Procesamiento de Nuevas Órdenes Agendadas / Pendientes del Tramo Activo (ESTRICTAMENTE AVERIAS)
     if (!tramoFiltro) {
       console.log(`[CRON] Fuera de las ventanas de envío (07-09h, 11-13h, 15-17h). Hora actual: ${horaActual}h. No se procesan nuevos agendamientos.`);
     } else {
-      console.log(`--- Procesando Órdenes de HOY del Tramo [${tramoFiltro}:00] ---`);
+      console.log(`--- Procesando Órdenes de HOY del Tramo [${tramoFiltro}:00] (SOLO AVERIAS) ---`);
       const [rows] = await pool.query(`
         SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
         FROM ${MAIN_TABLE} t
-        LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
+        INNER JOIN TipoServicio ts ON t.Producto = ts.Servicio
         LEFT JOIN LOG_NOTIFICACIONES_WSP l
           ON t.OrdenId = l.OrdenId AND l.EstadoNotificado = t.Estado
-        WHERE t.Estado IN ('Agendada', 'Pendiente')
+        WHERE ts.Tipo = 'AVERIAS'
+          AND t.Estado IN ('Agendada', 'Pendiente')
           AND DATE(t.\`F.Soli\`) = CURDATE()
           AND TIME(t.\`F.Soli\`) LIKE ?
           AND l.id IS NULL
@@ -42,9 +43,9 @@ async function runCron() {
       `, [`${tramoFiltro}%`]);
 
       if (rows.length === 0) {
-        console.log(`✔ No hay órdenes pendientes de HOY para el tramo [${tramoFiltro}:00].`);
+        console.log(`✔ No hay órdenes pendientes de HOY para el tramo [${tramoFiltro}:00] de tipo AVERIAS.`);
       } else {
-        console.log(`Encontradas ${rows.length} órden(es) pendientes de notificación para HOY [${tramoFiltro}:00].`);
+        console.log(`Encontradas ${rows.length} órden(es) pendientes de notificación para HOY [${tramoFiltro}:00] (SOLO AVERIAS).`);
         
         for (const row of rows) {
           const result = await sendMantraNotification(row);
@@ -54,8 +55,10 @@ async function runCron() {
             [row.OrdenId, row.Estado, result.success, result.errorDetail]
           );
 
-          if (result.success) {
+          if (result.success && !result.skipped) {
             console.log(`✔ Log guardado exitosamente. No se volverá a notificar la orden ${row.OrdenId} por este estado.`);
+          } else if (result.skipped) {
+            console.log(`- Orden ${row.OrdenId} omitida (${result.errorDetail}).`);
           } else {
             console.log(`❌ Orden ${row.OrdenId} falló. El error se ha guardado en el log de la BD para revisión.`);
           }
@@ -63,16 +66,19 @@ async function runCron() {
       }
     }
 
-    // 2. Procesamiento de Reprogramaciones
-    console.log("\n--- Procesando Reprogramaciones ---");
+    // 2. Procesamiento de Reprogramaciones (SOLO AVERIAS)
+    console.log("\n--- Procesando Reprogramaciones (SOLO AVERIAS) ---");
     const [reprogs] = await pool.query(`
       SELECT r.*, t.OrdenId, t.TeleMovilNume, t.ClienteFinal, t.IdenServi, t.TipoOrden, t.Producto, t.\`Sector Operativo\`, t.CodiSegui, t.Direccion, ts.Tipo as CategoriaServicioMantra
       FROM reprogramaciones r
       JOIN ${MAIN_TABLE} t ON r.token = t.token
-      LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
+      INNER JOIN TipoServicio ts ON t.Producto = ts.Servicio
       LEFT JOIN LOG_NOTIFICACIONES_WSP l
         ON l.OrdenId = r.id AND l.EstadoNotificado = 'Reprogramacion'
-      WHERE t.Estado IN ('Agendada', 'Pendiente') AND l.id IS NULL
+      WHERE ts.Tipo = 'AVERIAS'
+        AND t.Estado IN ('Agendada', 'Pendiente')
+        AND DATE(r.fecha_solicitada) >= CURDATE()
+        AND l.id IS NULL
       LIMIT 50
     `);
 

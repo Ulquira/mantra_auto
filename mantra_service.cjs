@@ -110,26 +110,15 @@ async function sendMantraNotification(orden) {
   console.log(`Procesando Orden: ${orden.OrdenId} - ${firstName} (${phone}) [Nombre completo: ${fullName}]`);
   console.log(`=================================================`);
 
-  // Cruce de datos basado en TipoServicioBD
-  let tipoServicio = 'Instalacion';
+  // Cruce de datos basado en TipoServicioBD: SOLO PERMITIR 'AVERIAS'
   const categoria = (orden.CategoriaServicioMantra || '').toUpperCase();
 
-  if (categoria === 'NO') {
-    console.log(`[SKIP] El producto no requiere notificación (Tipo = NO).`);
-    return { success: true, skipped: true, errorDetail: 'El producto no requiere notificación (Tipo = NO).' };
-  } else if (categoria === 'AVERIAS' || categoria === 'POSTVENTA') {
-    tipoServicio = 'Averias';
-  } else if (categoria === 'INSTALACION' || categoria === 'PROVINCIA') {
-    tipoServicio = 'Instalacion';
-  } else {
-    // Fallback si no está mapeado en la tabla TipoServicio
-    const tipoOrden = (orden.TipoOrden || '').toLowerCase();
-    const producto = (orden.Producto || '').toLowerCase();
-    if (tipoOrden.includes('averia') || tipoOrden.includes('visita') || producto.includes('averia')) {
-      tipoServicio = 'Averias';
-    }
+  if (categoria !== 'AVERIAS') {
+    console.log(`[SKIP] El producto no es de tipo AVERIAS (Tipo actual: '${categoria || 'Sin mapear'}').`);
+    return { success: true, skipped: true, errorDetail: `Notificación omitida: Producto no es AVERIAS (Tipo: '${categoria || 'Sin mapear'}').` };
   }
 
+  const tipoServicio = 'Averias';
   const credentials = MANTRA_CONFIG[tipoServicio];
   const sectorOperativo = (orden['Sector Operativo'] || '').toUpperCase();
   const templateIdToUse = sectorOperativo.includes('OESTE 2') ? credentials.TEMPLATE_ID_OESTE2 : credentials.TEMPLATE_ID_DEFAULT;
@@ -236,26 +225,15 @@ async function sendReprogramacionNotification(reprog, orden) {
   console.log(`Procesando Reprogramación ID: ${reprog.id} | Orden: ${orden.OrdenId} - ${firstName} (${phone}) [Nombre completo: ${fullName}]`);
   console.log(`=================================================`);
 
-  // Evaluamos tipo de servicio basado en tabla TipoServicio
-  let tipoServicio = 'Instalacion';
+  // Evaluamos tipo de servicio basado en tabla TipoServicio: SOLO PERMITIR 'AVERIAS'
   const categoria = (orden.CategoriaServicioMantra || '').toUpperCase();
 
-  if (categoria === 'NO') {
-    console.log(`[SKIP] El producto no requiere notificación de reprogramación (Tipo = NO).`);
-    return { success: true, skipped: true, errorDetail: 'El producto no requiere notificación (Tipo = NO).' };
-  } else if (categoria === 'AVERIAS' || categoria === 'POSTVENTA') {
-    tipoServicio = 'Averias';
-  } else if (categoria === 'INSTALACION' || categoria === 'PROVINCIA') {
-    tipoServicio = 'Instalacion';
-  } else {
-    // Fallback si no está mapeado
-    const tipoOrden = (orden.TipoOrden || '').toLowerCase();
-    const producto = (orden.Producto || '').toLowerCase();
-    if (tipoOrden.includes('averia') || tipoOrden.includes('visita') || producto.includes('averia')) {
-      tipoServicio = 'Averias';
-    }
+  if (categoria !== 'AVERIAS') {
+    console.log(`[SKIP] La reprogramación no es de tipo AVERIAS (Tipo actual: '${categoria || 'Sin mapear'}').`);
+    return { success: true, skipped: true, errorDetail: `Reprogramación omitida: Producto no es AVERIAS (Tipo: '${categoria || 'Sin mapear'}').` };
   }
 
+  const tipoServicio = 'Averias';
   const credentials = MANTRA_CONFIG[tipoServicio];
   
   if (!credentials.TEMPLATE_REPROG_ID) {
@@ -391,7 +369,7 @@ async function runCron(filterMode = 'ALL') {
   try {
     await ensureLogTableExists(pool);
 
-    let dateCondition = "";
+    let dateCondition = " AND DATE(t.`F.Soli`) = CURDATE()";
     if (filterMode === 'NEXT_DAY') {
       dateCondition = " AND DATE(t.`F.Soli`) = DATE_ADD(CURDATE(), INTERVAL 1 DAY)";
     } else if (filterMode === 'SAME_DAY') {
@@ -401,10 +379,12 @@ async function runCron(filterMode = 'ALL') {
     const queryStr = `
       SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
       FROM ${MAIN_TABLE} t
-      LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
+      INNER JOIN TipoServicio ts ON t.Producto = ts.Servicio
       LEFT JOIN LOG_NOTIFICACIONES_WSP l
         ON t.OrdenId = l.OrdenId AND l.EstadoNotificado = t.Estado
-      WHERE t.Estado IN ('Agendada', 'Pendiente') AND l.id IS NULL ${dateCondition}
+      WHERE ts.Tipo = 'AVERIAS'
+        AND t.Estado IN ('Agendada', 'Pendiente')
+        AND l.id IS NULL ${dateCondition}
       LIMIT 50
     `;
 
@@ -460,20 +440,23 @@ async function runQueueCron() {
       return;
     }
 
-    // 2.1 Limpieza automática de la cola: descartar IDs cuyas fechas ya hayan vencido (días anteriores)
+    // 2.1 Limpieza automática de la cola: descartar IDs cuyas fechas no sean HOY o cuyo producto NO sea 'AVERIAS'
     await pool.query(`
       DELETE c FROM COLA_NOTIFICACIONES_MANTRA c
-      INNER JOIN ${MAIN_TABLE} t ON c.ordenId = t.OrdenId
-      WHERE DATE(t.\`F.Soli\`) < CURDATE()
+      LEFT JOIN ${MAIN_TABLE} t ON c.ordenId = t.OrdenId
+      LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
+      WHERE DATE(t.\`F.Soli\`) <> CURDATE() OR ts.Tipo <> 'AVERIAS' OR ts.Tipo IS NULL
     `);
 
-    // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola y cuyo F.Soli corresponda a HOY y al tramo objetivo
+    // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola, sean de HOY, correspondan al tramo y sean estrictamente 'AVERIAS'
     const queryStr = `
       SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, c.id as colaId, ts.Tipo as CategoriaServicioMantra
       FROM COLA_NOTIFICACIONES_MANTRA c
       INNER JOIN ${MAIN_TABLE} t ON c.ordenId = t.OrdenId
-      LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
-      WHERE DATE(t.\`F.Soli\`) = CURDATE() AND TIME(t.\`F.Soli\`) LIKE ? 
+      INNER JOIN TipoServicio ts ON t.Producto = ts.Servicio
+      WHERE ts.Tipo = 'AVERIAS'
+        AND DATE(t.\`F.Soli\`) = CURDATE() 
+        AND TIME(t.\`F.Soli\`) LIKE ? 
       ORDER BY c.id ASC LIMIT 50
     `;
     const searchPattern = `${tramoFiltro}%`;
