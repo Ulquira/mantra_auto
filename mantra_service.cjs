@@ -340,13 +340,13 @@ async function processOrderById(ordenId) {
         (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
         OR t.OrdenId = l.OrdenId
       ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
-      WHERE t.OrdenId = ? AND t.Estado = 'Pendiente' AND l.id IS NULL
+      WHERE t.OrdenId = ? AND t.Estado IN ('Pendiente', 'Agendada') AND l.id IS NULL
     `, [ordenId]);
 
     if (rows.length === 0) {
       return {
         success: false,
-        message: `La orden ${ordenId} no está en estado 'Pendiente' o ya fue notificada previamente hoy.`
+        message: `La orden ${ordenId} no está en estado 'Pendiente' ni 'Agendada', o ya fue notificada previamente hoy.`
       };
     }
 
@@ -399,11 +399,11 @@ async function runQueueCron() {
         OR t.OrdenId = l.OrdenId
       ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
     `);
-    // Eliminamos de la cola órdenes cuyo estado actual ya no es Pendiente
+    // Eliminamos de la cola órdenes cuyo estado actual ya no es Pendiente ni Agendada
     await conn.query(`
       DELETE c FROM COLA_NOTIFICACIONES_MANTRA c
       INNER JOIN vw_winordetraba t ON c.ordenId = t.OrdenId
-      WHERE t.Estado <> 'Pendiente'
+      WHERE t.Estado NOT IN ('Pendiente', 'Agendada')
     `);
 
     // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola, cuyo F.Soli corresponda a HOY y al tramo objetivo
@@ -418,7 +418,7 @@ async function runQueueCron() {
       ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
       WHERE TIME(\`F.Soli\`) LIKE ? 
         AND DATE(t.\`F.Soli\`) = CURDATE()
-        AND t.Estado = 'Pendiente'
+        AND t.Estado IN ('Pendiente', 'Agendada')
         AND l.id IS NULL
       ORDER BY c.id ASC LIMIT 50
     `;

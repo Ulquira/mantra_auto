@@ -8,8 +8,8 @@ async function runCron() {
   try {
     await ensureLogTableExists(conn);
 
-    // 1. Procesamiento de Nuevas Órdenes Pendientes (Solo Pendiente, del MISMO DÍA y sin notificación previa hoy)
-    console.log("--- Procesando Órdenes Pendientes ---");
+    // 1. Procesamiento de Nuevas Órdenes Pendientes o Agendadas (del MISMO DÍA y sin notificación previa hoy)
+    console.log("--- Procesando Órdenes Pendientes / Agendadas ---");
     const [rows] = await conn.query(`
       SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
       FROM vw_winordetraba t
@@ -18,13 +18,13 @@ async function runCron() {
         (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
         OR t.OrdenId = l.OrdenId
       ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
-      WHERE t.Estado = 'Pendiente' 
+      WHERE t.Estado IN ('Pendiente', 'Agendada') 
         AND DATE(t.\`F.Soli\`) = CURDATE()
         AND l.id IS NULL
     `);
 
     if (rows.length === 0) {
-      console.log("✔ No hay órdenes nuevas en estado 'Pendiente' pendientes de notificar hoy.");
+      console.log("✔ No hay órdenes nuevas en estado 'Pendiente' o 'Agendada' pendientes de notificar hoy.");
     } else {
       console.log(`Encontradas ${rows.length} órden(es) pendientes de notificación.`);
       

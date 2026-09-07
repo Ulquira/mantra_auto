@@ -32,13 +32,13 @@ require('dotenv').config();
     await conn.query(`DROP TRIGGER IF EXISTS trg_winordetraba_pendiente_update`);
     await conn.query(`DROP TRIGGER IF EXISTS trg_winordetraba_pendiente_insert`);
 
-    console.log("5. Creando triggers de producción en vw_winordetraba...");
+    console.log("5. Creando triggers de producción en vw_winordetraba (Pendiente y Agendada)...");
     await conn.query(`
       CREATE TRIGGER trg_winordetraba_pendiente_update 
       AFTER UPDATE ON vw_winordetraba
       FOR EACH ROW
       BEGIN
-        IF NEW.Estado = 'Pendiente' AND OLD.Estado <> 'Pendiente' THEN
+        IF NEW.Estado IN ('Pendiente', 'Agendada') AND OLD.Estado NOT IN ('Pendiente', 'Agendada') THEN
           INSERT INTO COLA_NOTIFICACIONES_MANTRA (ordenId) VALUES (NEW.OrdenId);
         END IF;
       END;
@@ -49,7 +49,7 @@ require('dotenv').config();
       AFTER INSERT ON vw_winordetraba
       FOR EACH ROW
       BEGIN
-        IF NEW.Estado = 'Pendiente' THEN
+        IF NEW.Estado IN ('Pendiente', 'Agendada') THEN
           INSERT INTO COLA_NOTIFICACIONES_MANTRA (ordenId) VALUES (NEW.OrdenId);
         END IF;
       END;
