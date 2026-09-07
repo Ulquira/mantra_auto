@@ -71,7 +71,7 @@ async function runCron() {
     // 2. Procesamiento de Reprogramaciones (SOLO AVERIAS)
     console.log("\n--- Procesando Reprogramaciones (SOLO AVERIAS) ---");
     const [reprogs] = await pool.query(`
-      SELECT r.*, t.OrdenId, t.TeleMovilNume, t.ClienteFinal, t.IdenServi, t.TipoOrden, t.Producto, t.\`Sector Operativo\`, t.CodiSegui, t.Direccion, ts.Tipo as CategoriaServicioMantra
+      SELECT r.id as reprog_id, r.fecha_solicitada, r.turno, r.motivo as motivo_reprog, t.*, ts.Tipo as CategoriaServicioMantra
       FROM reprogramaciones r
       JOIN ${MAIN_TABLE} t ON r.token = t.token
       INNER JOIN TipoServicio ts ON t.Producto = ts.Servicio
@@ -90,35 +90,26 @@ async function runCron() {
       console.log(`Encontradas ${reprogs.length} reprogramacion(es) pendiente(s).`);
       
       for (const reprog of reprogs) {
-        // Adaptamos el objeto orden para pasarlo a los parámetros que espera la API
-        const ordenContext = {
-          OrdenId: reprog.OrdenId,
-          TeleMovilNume: reprog.TeleMovilNume,
-          ClienteFinal: reprog.ClienteFinal,
-          IdenServi: reprog.IdenServi,
-          token: reprog.token,
-          TipoOrden: reprog.TipoOrden,
-          Producto: reprog.Producto,
-          'Sector Operativo': reprog['Sector Operativo'],
-          CodiSegui: reprog.CodiSegui,
-          Direccion: reprog.Direccion,
-          CategoriaServicioMantra: reprog.CategoriaServicioMantra
+        const reprogContext = {
+          id: reprog.reprog_id,
+          fecha_solicitada: reprog.fecha_solicitada,
+          turno: reprog.turno
         };
 
-        const result = await sendReprogramacionNotification(reprog, ordenContext);
+        const result = await sendReprogramacionNotification(reprogContext, reprog);
         
         // Guardamos en el log usando el ID de la reprogramación como OrdenId para no chocar con los logs normales
         await pool.query(
           'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
-          [reprog.id, reprog.CodiSegui || null, 'Reprogramacion', result.success, result.errorDetail]
+          [reprog.reprog_id, reprog.CodiSegui || null, 'Reprogramacion', result.success, result.errorDetail]
         );
 
         if (result.success && !result.skipped) {
-          console.log(`✔ Log de Reprogramación (ID: ${reprog.id}) guardado exitosamente.`);
+          console.log(`✔ Log de Reprogramación (ID: ${reprog.reprog_id}) guardado exitosamente.`);
         } else if (result.skipped) {
-          console.log(`- Reprogramación (ID: ${reprog.id}) omitida (${result.errorDetail}).`);
+          console.log(`- Reprogramación (ID: ${reprog.reprog_id}) omitida (${result.errorDetail}).`);
         } else {
-          console.log(`❌ Reprogramación (ID: ${reprog.id}) falló. El error se ha guardado.`);
+          console.log(`❌ Reprogramación (ID: ${reprog.reprog_id}) falló. El error se ha guardado.`);
         }
       }
     }

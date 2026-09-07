@@ -8,14 +8,16 @@ const MANTRA_CONFIG = {
     API_KEY: "3d0d59f1-f3ea-47be-b5b0-d7ffca33817d",
     TEMPLATE_ID_DEFAULT: "6875723e1cb8562af849400e",
     TEMPLATE_ID_OESTE2: "6a7a457736ef53a657fc03ed",
-    TEMPLATE_REPROG_ID: "6a9847e14f6db1b188cd5ce3"
+    TEMPLATE_REPROG_ID: "6a9847e14f6db1b188cd5ce3",
+    TAG_TRAKING_ID: "4c888a1a-b530-40e4-abdf-9bb941eb768f"
   },
   Averias: {
     GROUP_ID: "68508b455ba42fd0a6660300",
     API_KEY: "618684ea-0e61-478f-9b22-bc0fd8b8a934",
     TEMPLATE_ID_DEFAULT: "68fac2ea40478663c8b51c36",
     TEMPLATE_ID_OESTE2: "6a90c047e91ab8e19836a561",
-    TEMPLATE_REPROG_ID: "6a984a1d5781ebbf9f145a6b"
+    TEMPLATE_REPROG_ID: "6a984a1d5781ebbf9f145a6b",
+    TAG_TRAKING_ID: "638b55de-0565-4a1f-b9eb-a914f450a7fc"
   }
 };
 
@@ -48,6 +50,70 @@ function extractFirstName(fullName) {
   
   // Formato normal: "RODRIGO LUIS SANIZ BAZAN" -> "RODRIGO"
   return clean.split(' ')[0];
+}
+
+function formatDateSpanish(rawDate) {
+  if (!rawDate) return "fecha por confirmar";
+  const dateObj = new Date(rawDate);
+  if (isNaN(dateObj.getTime())) return String(rawDate);
+  const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+  return `${dateObj.getUTCDate()} de ${meses[dateObj.getUTCMonth()]}`;
+}
+
+function buildHomologatedCustomData(orden, overrides = {}) {
+  const rawPhone = orden.TeleMovilNume || '';
+  const phone = rawPhone.replace(/\D/g, '').slice(-9);
+  const fullName = orden.ClienteFinal || '';
+  const firstName = extractFirstName(fullName);
+
+  const ticket = orden.CodiSegui ? String(orden.CodiSegui).trim() : String(orden.OrdenId || '');
+  const fecha = overrides.fechaFormateada || formatDateSpanish(orden.f_date || orden['F.Soli']);
+  
+  let rangoHorario = overrides.rangoHorario;
+  if (!rangoHorario) {
+    const t = orden.f_time || (orden['F.Soli'] ? String(orden['F.Soli']).slice(11, 19) : '');
+    if (t && t.startsWith('08')) rangoHorario = "8AM - 12PM";
+    else if (t && t.startsWith('12')) rangoHorario = "12PM - 4PM";
+    else if (t && t.startsWith('16')) rangoHorario = "4PM - 8PM";
+    else rangoHorario = t || "horario por confirmar";
+  }
+
+  const direccion = orden.Direccion ? orden.Direccion.split('||')[0].trim() : "";
+  const trackingLink = orden.token ? `https://go.win.pe/seguimiento/${orden.token}` : (orden.link || '');
+  const plan = extractPlanName(orden.IdenServi) || orden.Producto || "tu plan Win";
+  
+  // custom_8: FechaVenta (FechaUltiEsta o f_visita)
+  const fechaVentaRaw = orden.FechaUltiEsta || orden.f_visita || orden.FechaIniVisi;
+  const fechaVenta = fechaVentaRaw ? formatDateSpanish(fechaVentaRaw) : fecha;
+
+  // custom_9: Departamento / Provincia / Distrito
+  const depProvDist = [orden.Region, orden.Provincia, orden.Zona || orden.Localidad].filter(Boolean).join(' / ') || (orden.Localidad || 'LIMA');
+
+  // custom_10: Canal de venta / Empresa
+  const canalVenta = orden.Empresa || orden['Sector Operativo'] || 'WIN';
+
+  const data = {
+    name: firstName,
+    phone: phone,
+    countryCode: "51",
+    custom_1: ticket,
+    custom_2: fecha,
+    custom_3: rangoHorario,
+    custom_4: direccion,
+    custom_5: trackingLink,
+    custom_6: plan,
+    custom_7: firstName,
+    custom_8: fechaVenta,
+    custom_9: depProvDist,
+    custom_10: canalVenta
+  };
+
+  // Si se detecta OESTE 2 / OESTE -2, se añade la etiqueta TRAKING
+  if (overrides.tagId) {
+    data.tagIds = [overrides.tagId];
+  }
+
+  return { firstName, fullName, phone, data };
 }
 
 // Configuración de Connection Pool optimizada (Límite bajo, timeouts agresivos y reciclaje)
@@ -89,31 +155,6 @@ async function ensureLogTableExists(dbOrPool) {
 }
 
 async function sendMantraNotification(orden) {
-  const rawPhone = orden.TeleMovilNume || '';
-  const phone = rawPhone.replace(/\D/g, '').slice(-9);
-  const fullName = orden.ClienteFinal || '';
-  const firstName = extractFirstName(fullName);
-
-  let fechaFormateada = "fecha por confirmar";
-  if (orden.f_date) {
-    const dateObj = new Date(orden.f_date);
-    const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-    fechaFormateada = `${dateObj.getUTCDate()} de ${meses[dateObj.getUTCMonth()]}`;
-  }
-
-  let rangoHorario = "horario por confirmar";
-  const t = orden.f_time;
-  if (t) {
-    if (t.startsWith('08')) rangoHorario = "8AM - 12PM";
-    else if (t.startsWith('12')) rangoHorario = "12PM - 4PM";
-    else if (t.startsWith('16')) rangoHorario = "4PM - 8PM";
-    else rangoHorario = t;
-  }
-
-  console.log(`\n=================================================`);
-  console.log(`Procesando Orden: ${orden.OrdenId} - ${firstName} (${phone}) [Nombre completo: ${fullName}]`);
-  console.log(`=================================================`);
-
   // Cruce de datos basado en TipoServicioBD: SOLO PERMITIR 'AVERIAS'
   const categoria = (orden.CategoriaServicioMantra || '').toUpperCase();
 
@@ -125,42 +166,18 @@ async function sendMantraNotification(orden) {
   const tipoServicio = 'Averias';
   const credentials = MANTRA_CONFIG[tipoServicio];
   const sectorOperativo = (orden['Sector Operativo'] || '').toUpperCase();
-  const templateIdToUse = sectorOperativo.includes('OESTE 2') ? credentials.TEMPLATE_ID_OESTE2 : credentials.TEMPLATE_ID_DEFAULT;
-  console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Sector: ${sectorOperativo || 'N/A'} | Template Asignado: ${templateIdToUse}`);
+  const isOeste2 = sectorOperativo.includes('OESTE 2') || sectorOperativo.includes('OESTE -2') || sectorOperativo.includes('OESTE-2');
+  const templateIdToUse = isOeste2 ? credentials.TEMPLATE_ID_OESTE2 : credentials.TEMPLATE_ID_DEFAULT;
+  const tagIdToUse = isOeste2 ? credentials.TAG_TRAKING_ID : null;
 
-  const trackingLink = orden.token ? `https://go.win.pe/seguimiento/${orden.token}` : (orden.link || '');
+  const { firstName, fullName, phone, data: customData } = buildHomologatedCustomData(orden, {
+    tagId: tagIdToUse
+  });
 
-  let customData = {};
-  if (tipoServicio === 'Averias') {
-    const ticket = orden.CodiSegui ? String(orden.CodiSegui).trim() : String(orden.OrdenId);
-    const direccion = orden.Direccion ? orden.Direccion.split('||')[0].trim() : "";
-    customData = {
-      name: firstName,
-      phone: phone,
-      countryCode: "51",
-      custom_1: ticket,
-      custom_2: fechaFormateada,
-      custom_3: rangoHorario,
-      custom_4: direccion,
-      custom_5: trackingLink,
-      custom_6: trackingLink,
-      custom_7: firstName,
-      custom_10: trackingLink
-    };
-  } else {
-    customData = {
-      name: firstName,
-      phone: phone,
-      countryCode: "51",
-      custom_1: fechaFormateada,
-      custom_2: rangoHorario,
-      custom_3: extractPlanName(orden.IdenServi),
-      custom_5: trackingLink,
-      custom_6: trackingLink,
-      custom_7: firstName,
-      custom_10: trackingLink
-    };
-  }
+  console.log(`\n=================================================`);
+  console.log(`Procesando Orden: ${orden.OrdenId} - ${firstName} (${phone}) [Nombre completo: ${fullName}]`);
+  console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Sector: ${sectorOperativo || 'N/A'} | Template: ${templateIdToUse} | Etiqueta TRAKING: ${isOeste2 ? 'SÍ (ID: ' + tagIdToUse + ')' : 'NO'}`);
+  console.log(`=================================================`);
 
   const contactPayload = {
     groupId: credentials.GROUP_ID,
@@ -169,7 +186,7 @@ async function sendMantraNotification(orden) {
   };
 
   try {
-    console.log("1. Enviando petición para crear/actualizar contacto...");
+    console.log("1. Enviando petición para crear/actualizar contacto con variables homologadas y etiquetas...");
     const resContact = await fetch(URL_CREATE_CONTACT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -210,25 +227,6 @@ async function sendMantraNotification(orden) {
 }
 
 async function sendReprogramacionNotification(reprog, orden) {
-  const rawPhone = orden.TeleMovilNume || '';
-  const phone = rawPhone.replace(/\D/g, '').slice(-9);
-  const fullName = orden.ClienteFinal || '';
-  const firstName = extractFirstName(fullName);
-
-  // Formateo de fecha según reprogramaciones.fecha_solicitada
-  let fechaFormateada = "fecha por confirmar";
-  if (reprog.fecha_solicitada) {
-    const dateObj = new Date(reprog.fecha_solicitada);
-    const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-    fechaFormateada = `${dateObj.getUTCDate()} de ${meses[dateObj.getUTCMonth()]}`;
-  }
-
-  const rangoHorario = reprog.turno || "horario por confirmar";
-
-  console.log(`\n=================================================`);
-  console.log(`Procesando Reprogramación ID: ${reprog.id} | Orden: ${orden.OrdenId} - ${firstName} (${phone}) [Nombre completo: ${fullName}]`);
-  console.log(`=================================================`);
-
   // Evaluamos tipo de servicio basado en tabla TipoServicio: SOLO PERMITIR 'AVERIAS'
   const categoria = (orden.CategoriaServicioMantra || '').toUpperCase();
 
@@ -245,41 +243,23 @@ async function sendReprogramacionNotification(reprog, orden) {
     return { success: true, skipped: true, errorDetail: 'Plantilla de reprogramación no configurada.' };
   }
 
-  console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Template Asignado: ${credentials.TEMPLATE_REPROG_ID}`);
+  const sectorOperativo = (orden['Sector Operativo'] || '').toUpperCase();
+  const isOeste2 = sectorOperativo.includes('OESTE 2') || sectorOperativo.includes('OESTE -2') || sectorOperativo.includes('OESTE-2');
+  const tagIdToUse = isOeste2 ? credentials.TAG_TRAKING_ID : null;
 
-  const trackingLink = orden.token ? `https://go.win.pe/seguimiento/${orden.token}` : (orden.link || '');
+  const fechaReprog = formatDateSpanish(reprog.fecha_solicitada);
+  const rangoHorario = reprog.turno || "horario por confirmar";
 
-  let customData = {};
-  if (tipoServicio === 'Averias') {
-    const ticket = orden.CodiSegui ? String(orden.CodiSegui).trim() : String(orden.OrdenId);
-    const direccion = orden.Direccion ? orden.Direccion.split('||')[0].trim() : "";
-    customData = {
-      name: firstName,
-      phone: phone,
-      countryCode: "51",
-      custom_1: fechaFormateada,
-      custom_2: rangoHorario,
-      custom_3: ticket,
-      custom_4: direccion,
-      custom_5: trackingLink,
-      custom_6: trackingLink,
-      custom_7: firstName,
-      custom_10: trackingLink
-    };
-  } else {
-    customData = {
-      name: firstName,
-      phone: phone,
-      countryCode: "51",
-      custom_1: fechaFormateada,
-      custom_2: rangoHorario,
-      custom_3: extractPlanName(orden.IdenServi),
-      custom_5: trackingLink,
-      custom_6: trackingLink,
-      custom_7: firstName,
-      custom_10: trackingLink
-    };
-  }
+  const { firstName, fullName, phone, data: customData } = buildHomologatedCustomData(orden, {
+    fechaFormateada: fechaReprog,
+    rangoHorario: rangoHorario,
+    tagId: tagIdToUse
+  });
+
+  console.log(`\n=================================================`);
+  console.log(`Procesando Reprogramación ID: ${reprog.id} | Orden: ${orden.OrdenId} - ${firstName} (${phone}) [Nombre completo: ${fullName}]`);
+  console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Template Asignado: ${credentials.TEMPLATE_REPROG_ID} | Etiqueta TRAKING: ${isOeste2 ? 'SÍ' : 'NO'}`);
+  console.log(`=================================================`);
 
   const contactPayload = {
     groupId: credentials.GROUP_ID,
