@@ -1,4 +1,4 @@
-# 📲 API Mantra - Automatización de Notificaciones WhatsApp
+# 📲 API Mantra - Automatización de Notificaciones WhatsApp (Producción)
 
 Módulo independiente para la automatización, sincronización de contactos y envío automático de plantillas de WhatsApp a través de la API de **Mantra**.
 
@@ -6,21 +6,19 @@ Módulo independiente para la automatización, sincronización de contactos y en
 
 ## 🚀 Descripción del Proyecto
 
-Este proyecto consulta las órdenes de instalación programadas/agendadas en la base de datos MySQL, extrae la información del cliente, formatea los campos requeridos (fecha, rango horario, plan y enlace único de seguimiento), actualiza el contacto en Mantra y dispara la plantilla de notificación por WhatsApp de manera automática.
+Este proyecto monitorea en tiempo real las órdenes en estado `Pendiente` en la tabla productiva `vw_winordetraba` mediante Triggers de MySQL y una cola de eventos (`COLA_NOTIFICACIONES_MANTRA`). Valida el tramo horario, el tipo de servicio en `tiposervicio` (Averías), formatea los campos requeridos (ticket, fecha, rango horario, dirección y enlace único de seguimiento), actualiza el contacto en Mantra y dispara la plantilla de notificación por WhatsApp de manera automática.
 
 ---
 
 ## 📂 Estructura de Archivos
 
-- **`mantra_cron.cjs`**: Script principal (CRON). Ejecuta el flujo completo:
-  1. Conexión a la BD y verificación de la tabla `LOG_NOTIFICACIONES_WSP`.
-  2. Selección de órdenes en estado `Agendada` sin notificar.
-  3. Formateo dinámico de fecha, horario, plan y token.
-  4. Creación/actualización del contacto en Mantra (`/contacts/new`).
-  5. Disparo de la plantilla de WhatsApp (`/contacts/send`).
-  6. Registro del estado de envío (Éxito/Fallo y detalle de error) en la tabla `LOG_NOTIFICACIONES_WSP`.
-- **`setup_test_mantra.cjs`**: Script utilitario para preparar el entorno de pruebas (`Testmantra`), actualizando el número de teléfono y reiniciando el log de envíos.
-- **`test_f_soli.cjs`**: Script auxiliar de verificación de campos de fecha/hora en la base de datos.
+- **`mantra_webhook.cjs`**: Servidor principal en Express que corre en Azure App Service:
+  1. Cron de Cola de eventos (cada 30s) que procesa órdenes `Pendiente` según los tramos de horario (07:00-09:00, 11:00-13:00, 15:00-17:00).
+  2. Cron de Reprogramaciones (cada minuto) para la tabla `reprogramaciones`.
+  3. Webhook HTTP `POST /webhook/estado-cambiado` para eventos inmediatos.
+- **`mantra_service.cjs`**: Módulo core de servicios y conexión con la API de Mantra.
+- **`mantra_cron.cjs`**: Script utilitario para ejecución por lotes manual.
+- **`setup_production_db.cjs`**: Script de inicialización de triggers e índices en la base de datos de producción (`vw_winordetraba`).
 - **`Documentacion_Mantra_API_unificada.pdf`**: Documentación oficial de la API de Mantra.
 - **`mantra_docs.txt`**: Extracción en texto plano de la documentación oficial de Mantra.
 

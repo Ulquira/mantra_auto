@@ -334,7 +334,7 @@ async function processOrderById(ordenId) {
 
     const [rows] = await conn.query(`
       SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
-      FROM Testmantra t
+      FROM vw_winordetraba t
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
       LEFT JOIN LOG_NOTIFICACIONES_WSP l ON (
         (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
@@ -393,7 +393,7 @@ async function runQueueCron() {
     // Eliminamos de la cola órdenes cuyo Ticket (CodiSegui) u OrdenId ya fue notificado exitosamente HOY
     await conn.query(`
       DELETE c FROM COLA_NOTIFICACIONES_MANTRA c
-      INNER JOIN Testmantra t ON c.ordenId = t.OrdenId
+      INNER JOIN vw_winordetraba t ON c.ordenId = t.OrdenId
       INNER JOIN LOG_NOTIFICACIONES_WSP l ON (
         (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
         OR t.OrdenId = l.OrdenId
@@ -402,7 +402,7 @@ async function runQueueCron() {
     // Eliminamos de la cola órdenes cuyo estado actual ya no es Pendiente
     await conn.query(`
       DELETE c FROM COLA_NOTIFICACIONES_MANTRA c
-      INNER JOIN Testmantra t ON c.ordenId = t.OrdenId
+      INNER JOIN vw_winordetraba t ON c.ordenId = t.OrdenId
       WHERE t.Estado <> 'Pendiente'
     `);
 
@@ -410,7 +410,7 @@ async function runQueueCron() {
     const queryStr = `
       SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, c.id as colaId, ts.Tipo as CategoriaServicioMantra
       FROM COLA_NOTIFICACIONES_MANTRA c
-      INNER JOIN Testmantra t ON c.ordenId = t.OrdenId
+      INNER JOIN vw_winordetraba t ON c.ordenId = t.OrdenId
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
       LEFT JOIN LOG_NOTIFICACIONES_WSP l ON (
         (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
@@ -454,11 +454,71 @@ async function runQueueCron() {
   }
 }
 
+async function runReprogramacionesCron() {
+  const conn = await getDbConnection();
+  try {
+    await ensureLogTableExists(conn);
+
+    const [reprogs] = await conn.query(`
+      SELECT r.*, t.OrdenId, t.TeleMovilNume, t.ClienteFinal, t.IdenServi, t.TipoOrden, t.Producto, t.\`Sector Operativo\`, t.CodiSegui, t.Direccion, ts.Tipo as CategoriaServicioMantra
+      FROM reprogramaciones r
+      JOIN vw_winordetraba t ON r.token = t.token
+      LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
+      LEFT JOIN LOG_NOTIFICACIONES_WSP l
+        ON l.OrdenId = r.id AND l.EstadoNotificado = 'Reprogramacion' AND l.EnviadoExitosamente = 1
+      WHERE l.id IS NULL
+      ORDER BY r.id ASC LIMIT 20
+    `);
+
+    if (reprogs.length > 0) {
+      console.log(`[REPROG] Encontradas ${reprogs.length} reprogramacion(es) pendiente(s).`);
+      
+      for (const reprog of reprogs) {
+        const ordenContext = {
+          OrdenId: reprog.OrdenId,
+          TeleMovilNume: reprog.TeleMovilNume,
+          ClienteFinal: reprog.ClienteFinal,
+          IdenServi: reprog.IdenServi,
+          token: reprog.token,
+          TipoOrden: reprog.TipoOrden,
+          Producto: reprog.Producto,
+          'Sector Operativo': reprog['Sector Operativo'],
+          CodiSegui: reprog.CodiSegui,
+          Direccion: reprog.Direccion,
+          CategoriaServicioMantra: reprog.CategoriaServicioMantra
+        };
+
+        const result = await sendReprogramacionNotification(reprog, ordenContext);
+        
+        await conn.query(
+          'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
+          [reprog.id, reprog.CodiSegui || null, 'Reprogramacion', result.success, result.errorDetail]
+        );
+
+        if (result.success && !result.skipped) {
+          console.log(`✔ Log de Reprogramación (ID: ${reprog.id}) guardado exitosamente.`);
+        } else if (result.skipped) {
+          console.log(`- Reprogramación (ID: ${reprog.id}) omitida (${result.errorDetail}).`);
+        } else {
+          console.log(`❌ Reprogramación (ID: ${reprog.id}) falló. El error se ha guardado.`);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("❌ Error en ReprogramacionesCron:", err.message);
+  } finally {
+    if (conn && conn.connection && conn.connection._closing === false) {
+      await conn.end();
+    }
+  }
+}
+
 module.exports = {
   getDbConnection,
   ensureLogTableExists,
   sendMantraNotification,
   sendReprogramacionNotification,
   processOrderById,
-  runQueueCron
+  runQueueCron,
+  runReprogramacionesCron
 };

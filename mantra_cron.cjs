@@ -12,7 +12,7 @@ async function runCron() {
     console.log("--- Procesando Órdenes Pendientes ---");
     const [rows] = await conn.query(`
       SELECT t.*, DATE(\`F.Soli\`) as f_date, TIME(\`F.Soli\`) as f_time, ts.Tipo as CategoriaServicioMantra
-      FROM Testmantra t
+      FROM vw_winordetraba t
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
       LEFT JOIN LOG_NOTIFICACIONES_WSP l ON (
         (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
@@ -49,7 +49,7 @@ async function runCron() {
     const [reprogs] = await conn.query(`
       SELECT r.*, t.OrdenId, t.TeleMovilNume, t.ClienteFinal, t.IdenServi, t.TipoOrden, t.Producto, t.\`Sector Operativo\`, t.CodiSegui, t.Direccion, ts.Tipo as CategoriaServicioMantra
       FROM reprogramaciones r
-      JOIN Testmantra t ON r.token = t.token
+      JOIN vw_winordetraba t ON r.token = t.token
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
       LEFT JOIN LOG_NOTIFICACIONES_WSP l
         ON l.OrdenId = r.id AND l.EstadoNotificado = 'Reprogramacion' AND l.EnviadoExitosamente = 1
