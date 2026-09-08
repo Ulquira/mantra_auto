@@ -133,7 +133,7 @@ const pool = mysql.createPool({
   keepAliveInitialDelay: 10000
 });
 
-const MAIN_TABLE = process.env.DB_TABLE || 'Testmantra';
+const MAIN_TABLE = process.env.DB_TABLE || 'vw_winordetraba';
 
 async function getDbConnection() {
   return pool;
