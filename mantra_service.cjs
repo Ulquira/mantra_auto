@@ -250,11 +250,41 @@ async function sendReprogramacionNotification(reprog, orden) {
   const fechaReprog = formatDateSpanish(reprog.fecha_solicitada);
   const rangoHorario = reprog.turno || "horario por confirmar";
 
-  const { firstName, fullName, phone, data: customData } = buildHomologatedCustomData(orden, {
-    fechaFormateada: fechaReprog,
-    rangoHorario: rangoHorario,
-    tagId: tagIdToUse
-  });
+  const rawPhone = orden.TeleMovilNume || '';
+  const phone = rawPhone.replace(/\D/g, '').slice(-9);
+  const fullName = orden.ClienteFinal || '';
+  const firstName = extractFirstName(fullName);
+
+  const ticket = orden.CodiSegui ? String(orden.CodiSegui).trim() : String(orden.OrdenId || '');
+  const direccion = orden.Direccion ? orden.Direccion.split('||')[0].trim() : "";
+  const trackingLink = orden.token ? `https://go.win.pe/seguimiento/${orden.token}` : (orden.link || '');
+  const plan = extractPlanName(orden.IdenServi) || orden.Producto || "tu plan Win";
+  const fechaVentaRaw = orden.FechaUltiEsta || orden.f_visita || orden.FechaIniVisi;
+  const fechaVenta = fechaVentaRaw ? formatDateSpanish(fechaVentaRaw) : fechaReprog;
+  const depProvDist = [orden.Region, orden.Provincia, orden.Zona || orden.Localidad].filter(Boolean).join(' / ') || (orden.Localidad || 'LIMA');
+  const canalVenta = orden.Empresa || orden['Sector Operativo'] || 'WIN';
+
+  // Mapeo exacto para la plantilla de Reprogramación:
+  // "Tu visita técnica está programada para el {{custom_1}} (Fecha). Nuestro equipo técnico estará en tu dirección entre las {{custom_2}} (Horario)."
+  const customData = {
+    name: firstName,
+    phone: phone,
+    countryCode: "51",
+    custom_1: fechaReprog,       // Fecha de la nueva cita
+    custom_2: rangoHorario,      // Rango horario/turno
+    custom_3: ticket,            // Ticket / Pedido
+    custom_4: direccion,         // Dirección
+    custom_5: trackingLink,      // Link seguimiento
+    custom_6: plan,              // Plan
+    custom_7: firstName,         // Nombre
+    custom_8: fechaVenta,        // Fecha Venta
+    custom_9: depProvDist,       // Ubicación
+    custom_10: trackingLink      // Link seguimiento
+  };
+
+  if (tagIdToUse) {
+    customData.tagIds = [tagIdToUse];
+  }
 
   console.log(`\n=================================================`);
   console.log(`Procesando Reprogramación ID: ${reprog.id} | Orden: ${orden.OrdenId} - ${firstName} (${phone}) [Nombre completo: ${fullName}]`);
