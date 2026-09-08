@@ -23,7 +23,7 @@ async function runCron() {
     else if (horaActual >= 11 && horaActual <= 13) tramoFiltro = '12';
     else if (horaActual >= 15 && horaActual <= 17) tramoFiltro = '16';
 
-    // 1. Procesamiento de Nuevas Órdenes Agendadas / Pendientes del Tramo Activo (ESTRICTAMENTE AVERIAS)
+    // 1. Procesamiento de Nuevas Órdenes Agendadas / Pendientes / En camino del Tramo Activo (ESTRICTAMENTE AVERIAS)
     if (!tramoFiltro) {
       console.log(`[CRON] Fuera de las ventanas de envío (07-09h, 11-13h, 15-17h). Hora actual: ${horaActual}h. No se procesan nuevos agendamientos.`);
     } else {
@@ -37,7 +37,7 @@ async function runCron() {
           OR (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
         ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
         WHERE ts.Tipo = 'AVERIAS'
-          AND t.Estado IN ('Agendada', 'Pendiente')
+          AND t.Estado IN ('Agendada', 'Pendiente', 'En camino')
           AND DATE(t.\`F.Soli\`) = CURDATE()
           AND TIME(t.\`F.Soli\`) LIKE ?
           AND l.id IS NULL
@@ -78,7 +78,7 @@ async function runCron() {
       LEFT JOIN LOG_NOTIFICACIONES_WSP l
         ON l.OrdenId = r.id AND l.EstadoNotificado = 'Reprogramacion' AND l.EnviadoExitosamente = 1
       WHERE ts.Tipo = 'AVERIAS'
-        AND t.Estado IN ('Agendada', 'Pendiente')
+        AND t.Estado IN ('Agendada', 'Pendiente', 'En camino')
         AND DATE(r.fecha_solicitada) >= CURDATE()
         AND l.id IS NULL
       LIMIT 50

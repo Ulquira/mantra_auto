@@ -321,7 +321,7 @@ async function processOrderById(ordenId) {
         OR (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
       ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
       WHERE t.OrdenId = ? 
-        AND t.Estado IN ('Agendada', 'Pendiente')
+        AND t.Estado IN ('Agendada', 'Pendiente', 'En camino')
         AND l.id IS NULL
     `, [ordenId]);
 
@@ -403,7 +403,7 @@ async function runQueueCron() {
         OR (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
       ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
       WHERE ts.Tipo = 'AVERIAS'
-        AND t.Estado IN ('Agendada', 'Pendiente')
+        AND t.Estado IN ('Agendada', 'Pendiente', 'En camino')
         AND DATE(t.\`F.Soli\`) = CURDATE() 
         AND TIME(t.\`F.Soli\`) LIKE ? 
         AND l.id IS NULL

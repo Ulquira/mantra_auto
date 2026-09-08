@@ -38,7 +38,7 @@ require('dotenv').config();
       AFTER UPDATE ON Testmantra
       FOR EACH ROW
       BEGIN
-        IF NEW.Estado IN ('Pendiente', 'Agendada') AND (OLD.Estado IS NULL OR OLD.Estado NOT IN ('Pendiente', 'Agendada') OR OLD.Estado <> NEW.Estado) THEN
+        IF NEW.Estado IN ('Pendiente', 'Agendada', 'En camino') AND (OLD.Estado IS NULL OR OLD.Estado NOT IN ('Pendiente', 'Agendada', 'En camino') OR OLD.Estado <> NEW.Estado) THEN
           INSERT INTO COLA_NOTIFICACIONES_MANTRA (ordenId) VALUES (NEW.OrdenId);
         END IF;
       END;
@@ -49,7 +49,7 @@ require('dotenv').config();
       AFTER INSERT ON Testmantra
       FOR EACH ROW
       BEGIN
-        IF NEW.Estado IN ('Pendiente', 'Agendada') THEN
+        IF NEW.Estado IN ('Pendiente', 'Agendada', 'En camino') THEN
           INSERT INTO COLA_NOTIFICACIONES_MANTRA (ordenId) VALUES (NEW.OrdenId);
         END IF;
       END;
