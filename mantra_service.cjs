@@ -441,6 +441,7 @@ async function runQueueCron() {
 module.exports = {
   pool,
   MAIN_TABLE,
+  MANTRA_CONFIG,
   getDbConnection,
   ensureLogTableExists,
   sendMantraNotification,

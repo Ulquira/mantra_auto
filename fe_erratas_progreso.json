@@ -1,0 +1,786 @@
+{
+  "960603213_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:40:15.855Z",
+    "cliente": "JAIME",
+    "telefono": "960603213",
+    "segmento": "Averias"
+  },
+  "949162513_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:40:19.447Z",
+    "cliente": "ANA",
+    "telefono": "949162513",
+    "segmento": "Instalaciones"
+  },
+  "986585319_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:40:23.399Z",
+    "cliente": "RODRIGO",
+    "telefono": "986585319",
+    "segmento": "Instalaciones"
+  },
+  "928247462_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:40:27.290Z",
+    "cliente": "VIVIANA",
+    "telefono": "928247462",
+    "segmento": "Instalaciones"
+  },
+  "937112070_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:40:31.318Z",
+    "cliente": "MIGUEL",
+    "telefono": "937112070",
+    "segmento": "Instalaciones"
+  },
+  "917754237_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:40:35.540Z",
+    "cliente": "KEVIN",
+    "telefono": "917754237",
+    "segmento": "Instalaciones"
+  },
+  "993756087_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:40:39.431Z",
+    "cliente": "VLADIVOSTOK",
+    "telefono": "993756087",
+    "segmento": "Instalaciones"
+  },
+  "980665066_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:40:42.579Z",
+    "cliente": "CARLOS",
+    "telefono": "980665066",
+    "segmento": "Averias"
+  },
+  "925098687_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:40:46.820Z",
+    "cliente": "YESENIA",
+    "telefono": "925098687",
+    "segmento": "Instalaciones"
+  },
+  "955566442_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:40:50.324Z",
+    "cliente": "JOSEPHINE",
+    "telefono": "955566442",
+    "segmento": "Averias"
+  },
+  "999669240_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:40:53.524Z",
+    "cliente": "CLIVER",
+    "telefono": "999669240",
+    "segmento": "Instalaciones"
+  },
+  "986791777_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:40:56.711Z",
+    "cliente": "DIANA",
+    "telefono": "986791777",
+    "segmento": "Instalaciones"
+  },
+  "932989839_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:40:59.898Z",
+    "cliente": "GIOVANNA",
+    "telefono": "932989839",
+    "segmento": "Averias"
+  },
+  "964538059_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:41:04.117Z",
+    "cliente": "TERESA",
+    "telefono": "964538059",
+    "segmento": "Instalaciones"
+  },
+  "954940381_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:41:08.174Z",
+    "cliente": "JESSICA",
+    "telefono": "954940381",
+    "segmento": "Instalaciones"
+  },
+  "936871599_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:41:12.133Z",
+    "cliente": "JUANA",
+    "telefono": "936871599",
+    "segmento": "Instalaciones"
+  },
+  "928106400_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:41:15.536Z",
+    "cliente": "ANA",
+    "telefono": "928106400",
+    "segmento": "Averias"
+  },
+  "998329404_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:41:19.524Z",
+    "cliente": "JUANA",
+    "telefono": "998329404",
+    "segmento": "Instalaciones"
+  },
+  "933819758_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:41:23.210Z",
+    "cliente": "IRVIN",
+    "telefono": "933819758",
+    "segmento": "Averias"
+  },
+  "950102257_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:41:26.408Z",
+    "cliente": "JOISY",
+    "telefono": "950102257",
+    "segmento": "Averias"
+  },
+  "989256240_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:41:29.834Z",
+    "cliente": "PATRICIA",
+    "telefono": "989256240",
+    "segmento": "Averias"
+  },
+  "986235723_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:41:33.190Z",
+    "cliente": "FRANCY",
+    "telefono": "986235723",
+    "segmento": "Averias"
+  },
+  "951048915_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:41:36.380Z",
+    "cliente": "FRANCISCO",
+    "telefono": "951048915",
+    "segmento": "Averias"
+  },
+  "944073635_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:41:40.776Z",
+    "cliente": "ESTHER",
+    "telefono": "944073635",
+    "segmento": "Instalaciones"
+  },
+  "965329729_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:41:43.978Z",
+    "cliente": "ROXANA",
+    "telefono": "965329729",
+    "segmento": "Instalaciones"
+  },
+  "960583671_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:41:47.685Z",
+    "cliente": "LUCY",
+    "telefono": "960583671",
+    "segmento": "Averias"
+  },
+  "957369878_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:41:51.633Z",
+    "cliente": "ISABEL",
+    "telefono": "957369878",
+    "segmento": "Instalaciones"
+  },
+  "993929474_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:41:55.759Z",
+    "cliente": "JESSICA",
+    "telefono": "993929474",
+    "segmento": "Instalaciones"
+  },
+  "924037660_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:41:59.195Z",
+    "cliente": "JUAN",
+    "telefono": "924037660",
+    "segmento": "Averias"
+  },
+  "907982652_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:42:03.115Z",
+    "cliente": "TELESFORO",
+    "telefono": "907982652",
+    "segmento": "Instalaciones"
+  },
+  "961660008_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:42:07.150Z",
+    "cliente": "MARYLIN",
+    "telefono": "961660008",
+    "segmento": "Instalaciones"
+  },
+  "902665244_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:42:10.628Z",
+    "cliente": "ERNESTO",
+    "telefono": "902665244",
+    "segmento": "Averias"
+  },
+  "995127460_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:42:14.041Z",
+    "cliente": "JENNIFER",
+    "telefono": "995127460",
+    "segmento": "Averias"
+  },
+  "985240491_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:42:17.984Z",
+    "cliente": "OTTO",
+    "telefono": "985240491",
+    "segmento": "Instalaciones"
+  },
+  "907191135_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:42:21.185Z",
+    "cliente": "ANITA",
+    "telefono": "907191135",
+    "segmento": "Instalaciones"
+  },
+  "996732628_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:42:24.522Z",
+    "cliente": "ALESSANDRA",
+    "telefono": "996732628",
+    "segmento": "Averias"
+  },
+  "955642281_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:42:27.687Z",
+    "cliente": "DALIA",
+    "telefono": "955642281",
+    "segmento": "Averias"
+  },
+  "979439014_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:42:31.064Z",
+    "cliente": "KVIA",
+    "telefono": "979439014",
+    "segmento": "Averias"
+  },
+  "980024758_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:42:34.454Z",
+    "cliente": "IMPORTACIONES",
+    "telefono": "980024758",
+    "segmento": "Averias"
+  },
+  "959532277_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:42:37.910Z",
+    "cliente": "RENE",
+    "telefono": "959532277",
+    "segmento": "Averias"
+  },
+  "948610223_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:42:41.113Z",
+    "cliente": "VILMA",
+    "telefono": "948610223",
+    "segmento": "Averias"
+  },
+  "977852265_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:42:45.072Z",
+    "cliente": "ROSA",
+    "telefono": "977852265",
+    "segmento": "Instalaciones"
+  },
+  "980482450_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:42:48.265Z",
+    "cliente": "GLORIA",
+    "telefono": "980482450",
+    "segmento": "Averias"
+  },
+  "981477928_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:42:52.225Z",
+    "cliente": "ELISA",
+    "telefono": "981477928",
+    "segmento": "Instalaciones"
+  },
+  "906239499_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:42:55.671Z",
+    "cliente": "JEREMY",
+    "telefono": "906239499",
+    "segmento": "Instalaciones"
+  },
+  "995117706_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:42:59.159Z",
+    "cliente": "KATTY",
+    "telefono": "995117706",
+    "segmento": "Instalaciones"
+  },
+  "998517290_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:43:03.112Z",
+    "cliente": "KEYLA",
+    "telefono": "998517290",
+    "segmento": "Instalaciones"
+  },
+  "907857255_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:43:06.830Z",
+    "cliente": "RUTH",
+    "telefono": "907857255",
+    "segmento": "Instalaciones"
+  },
+  "981873005_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:43:10.273Z",
+    "cliente": "MIGUEL",
+    "telefono": "981873005",
+    "segmento": "Instalaciones"
+  },
+  "922712458_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:43:13.486Z",
+    "cliente": "CRISTINA",
+    "telefono": "922712458",
+    "segmento": "Averias"
+  },
+  "953927354_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:43:17.983Z",
+    "cliente": "NANCY",
+    "telefono": "953927354",
+    "segmento": "Instalaciones"
+  },
+  "916765351_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:43:22.044Z",
+    "cliente": "ANAIS",
+    "telefono": "916765351",
+    "segmento": "Instalaciones"
+  },
+  "920069715_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:43:25.257Z",
+    "cliente": "GASDALY",
+    "telefono": "920069715",
+    "segmento": "Instalaciones"
+  },
+  "953247033_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:43:28.425Z",
+    "cliente": "DOMINICA",
+    "telefono": "953247033",
+    "segmento": "Averias"
+  },
+  "990896357_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:43:31.887Z",
+    "cliente": "FRANCO",
+    "telefono": "990896357",
+    "segmento": "Averias"
+  },
+  "910961658_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:43:36.005Z",
+    "cliente": "YOHANA",
+    "telefono": "910961658",
+    "segmento": "Instalaciones"
+  },
+  "902600542_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:43:40.155Z",
+    "cliente": "ROSMERY",
+    "telefono": "902600542",
+    "segmento": "Instalaciones"
+  },
+  "993323080_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:43:43.595Z",
+    "cliente": "SANDRO",
+    "telefono": "993323080",
+    "segmento": "Averias"
+  },
+  "962102002_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:43:47.620Z",
+    "cliente": "RUTH",
+    "telefono": "962102002",
+    "segmento": "Instalaciones"
+  },
+  "931908951_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:43:51.322Z",
+    "cliente": "DEL",
+    "telefono": "931908951",
+    "segmento": "Averias"
+  },
+  "998988026_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:43:55.554Z",
+    "cliente": "PAULINA",
+    "telefono": "998988026",
+    "segmento": "Instalaciones"
+  },
+  "938113527_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:43:59.277Z",
+    "cliente": "NATHAN",
+    "telefono": "938113527",
+    "segmento": "Averias"
+  },
+  "912039409_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:44:03.259Z",
+    "cliente": "JHOSWAR",
+    "telefono": "912039409",
+    "segmento": "Instalaciones"
+  },
+  "972798802_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:44:07.394Z",
+    "cliente": "MAXIMO",
+    "telefono": "972798802",
+    "segmento": "Instalaciones"
+  },
+  "998126846_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:44:10.584Z",
+    "cliente": "MARIO",
+    "telefono": "998126846",
+    "segmento": "Instalaciones"
+  },
+  "969616368_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:44:14.713Z",
+    "cliente": "MAYUMI",
+    "telefono": "969616368",
+    "segmento": "Instalaciones"
+  },
+  "989673699_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:44:18.648Z",
+    "cliente": "JOSE",
+    "telefono": "989673699",
+    "segmento": "Instalaciones"
+  },
+  "920784810_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:44:22.067Z",
+    "cliente": "ANGHEL",
+    "telefono": "920784810",
+    "segmento": "Averias"
+  },
+  "963286324_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:44:25.489Z",
+    "cliente": "IVAN",
+    "telefono": "963286324",
+    "segmento": "Averias"
+  },
+  "963821215_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:44:29.627Z",
+    "cliente": "MARIA",
+    "telefono": "963821215",
+    "segmento": "Instalaciones"
+  },
+  "943169499_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:44:32.850Z",
+    "cliente": "IVAN",
+    "telefono": "943169499",
+    "segmento": "Instalaciones"
+  },
+  "964508828_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:44:36.284Z",
+    "cliente": "RUBI",
+    "telefono": "964508828",
+    "segmento": "Averias"
+  },
+  "944339058_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:44:39.462Z",
+    "cliente": "CLEVER",
+    "telefono": "944339058",
+    "segmento": "Averias"
+  },
+  "941928990_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:44:42.876Z",
+    "cliente": "LILIANA",
+    "telefono": "941928990",
+    "segmento": "Averias"
+  },
+  "962199388_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:44:46.065Z",
+    "cliente": "WILBERT",
+    "telefono": "962199388",
+    "segmento": "Averias"
+  },
+  "903481369_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:44:49.755Z",
+    "cliente": "ELMER",
+    "telefono": "903481369",
+    "segmento": "Instalaciones"
+  },
+  "900818684_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:44:53.014Z",
+    "cliente": "JUAN",
+    "telefono": "900818684",
+    "segmento": "Averias"
+  },
+  "950569096_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:44:56.515Z",
+    "cliente": "LAUREANO",
+    "telefono": "950569096",
+    "segmento": "Averias"
+  },
+  "954665649_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:45:01.006Z",
+    "cliente": "JULIO",
+    "telefono": "954665649",
+    "segmento": "Instalaciones"
+  },
+  "947040617_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:45:04.718Z",
+    "cliente": "ALEXANDHER",
+    "telefono": "947040617",
+    "segmento": "Instalaciones"
+  },
+  "928723917_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:45:08.283Z",
+    "cliente": "EMMANUEL",
+    "telefono": "928723917",
+    "segmento": "Instalaciones"
+  },
+  "968854371_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:45:11.490Z",
+    "cliente": "BELTRAN",
+    "telefono": "968854371",
+    "segmento": "Instalaciones"
+  },
+  "938143939_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:45:14.666Z",
+    "cliente": "CARLOS",
+    "telefono": "938143939",
+    "segmento": "Instalaciones"
+  },
+  "998879030_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:45:18.702Z",
+    "cliente": "EMILIO",
+    "telefono": "998879030",
+    "segmento": "Instalaciones"
+  },
+  "920047143_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:45:22.714Z",
+    "cliente": "LUCIANO",
+    "telefono": "920047143",
+    "segmento": "Instalaciones"
+  },
+  "912767040_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:45:26.423Z",
+    "cliente": "ELMER",
+    "telefono": "912767040",
+    "segmento": "Averias"
+  },
+  "986795238_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:45:29.619Z",
+    "cliente": "LIDIA",
+    "telefono": "986795238",
+    "segmento": "Averias"
+  },
+  "926007983_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:45:33.327Z",
+    "cliente": "JOSE",
+    "telefono": "926007983",
+    "segmento": "Instalaciones"
+  },
+  "951396899_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:45:36.507Z",
+    "cliente": "FRANCISCA",
+    "telefono": "951396899",
+    "segmento": "Averias"
+  },
+  "989375080_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:45:39.948Z",
+    "cliente": "FRANK",
+    "telefono": "989375080",
+    "segmento": "Averias"
+  },
+  "986889660_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:45:44.097Z",
+    "cliente": "DEYSI",
+    "telefono": "986889660",
+    "segmento": "Instalaciones"
+  },
+  "969123391_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:45:47.803Z",
+    "cliente": "SOFIA",
+    "telefono": "969123391",
+    "segmento": "Averias"
+  },
+  "931224097_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:45:51.919Z",
+    "cliente": "JOSE",
+    "telefono": "931224097",
+    "segmento": "Instalaciones"
+  },
+  "937500059_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:45:55.357Z",
+    "cliente": "RAQUEL",
+    "telefono": "937500059",
+    "segmento": "Averias"
+  },
+  "927227173_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:45:58.587Z",
+    "cliente": "SIPRIANO",
+    "telefono": "927227173",
+    "segmento": "Instalaciones"
+  },
+  "934938014_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:46:01.913Z",
+    "cliente": "PAMELA",
+    "telefono": "934938014",
+    "segmento": "Averias"
+  },
+  "982153030_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:46:05.861Z",
+    "cliente": "MARIETA",
+    "telefono": "982153030",
+    "segmento": "Instalaciones"
+  },
+  "985244344_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:46:09.088Z",
+    "cliente": "ROBERTO",
+    "telefono": "985244344",
+    "segmento": "Instalaciones"
+  },
+  "922564659_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:46:13.049Z",
+    "cliente": "JUANA",
+    "telefono": "922564659",
+    "segmento": "Instalaciones"
+  },
+  "990963000_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:46:17.106Z",
+    "cliente": "ELSA",
+    "telefono": "990963000",
+    "segmento": "Instalaciones"
+  },
+  "927850094_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:46:21.569Z",
+    "cliente": "JUHNIOR",
+    "telefono": "927850094",
+    "segmento": "Instalaciones"
+  },
+  "936182149_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:46:25.779Z",
+    "cliente": "IRMA",
+    "telefono": "936182149",
+    "segmento": "Instalaciones"
+  },
+  "989661015_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:46:29.109Z",
+    "cliente": "JESUS",
+    "telefono": "989661015",
+    "segmento": "Averias"
+  },
+  "944449112_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:46:33.213Z",
+    "cliente": "DIEGO",
+    "telefono": "944449112",
+    "segmento": "Instalaciones"
+  },
+  "921799376_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:46:36.925Z",
+    "cliente": "LUIZA",
+    "telefono": "921799376",
+    "segmento": "Instalaciones"
+  },
+  "997514065_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:46:40.888Z",
+    "cliente": "ALEJANDRO",
+    "telefono": "997514065",
+    "segmento": "Instalaciones"
+  },
+  "965975734_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:46:44.086Z",
+    "cliente": "CYNTHIA",
+    "telefono": "965975734",
+    "segmento": "Averias"
+  },
+  "941797214_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:46:47.986Z",
+    "cliente": "CHARIS",
+    "telefono": "941797214",
+    "segmento": "Instalaciones"
+  },
+  "999169819_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:46:51.600Z",
+    "cliente": "ORLANDO",
+    "telefono": "999169819",
+    "segmento": "Averias"
+  },
+  "991785887_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:46:55.293Z",
+    "cliente": "MARIA",
+    "telefono": "991785887",
+    "segmento": "Averias"
+  },
+  "981255689_Instalaciones": {
+    "success": true,
+    "timestamp": "2026-09-07T15:46:59.500Z",
+    "cliente": "NECEFORO",
+    "telefono": "981255689",
+    "segmento": "Instalaciones"
+  },
+  "943105808_Averias": {
+    "success": true,
+    "timestamp": "2026-09-07T15:47:03.157Z",
+    "cliente": "ISABEL",
+    "telefono": "943105808",
+    "segmento": "Averias"
+  }
+}
