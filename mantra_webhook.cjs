@@ -4,6 +4,7 @@ const express = require('express');
 const cron = require('node-cron');
 const { processOrderById, runQueueCron } = require('./mantra_service.cjs');
 const { runCron } = require('./mantra_cron.cjs');
+const { syncAllTemplates } = require('./sync_all_template_reports.cjs');
 require('dotenv').config();
 
 const app = express();
@@ -22,6 +23,25 @@ cron.schedule('* * * * *', async () => {
   await runCron();
 });
 console.log(`⏰ Cron [Barrido Tramos + Reprogramaciones] activado. Escaneando cada minuto...`);
+
+// Cron Diario de Sincronización de Reportes de Mantra (8:00 AM hora Perú)
+cron.schedule('0 8 * * *', async () => {
+  console.log(`⏰ [8:00 AM Perú] Iniciando sincronización diaria de reportes de plantillas de Mantra...`);
+  try {
+    const hoy = new Date().toISOString().slice(0, 10);
+    // Sincronizar el día anterior y el día de hoy para consolidar métricas finales
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const ayer = d.toISOString().slice(0, 10);
+    await syncAllTemplates(ayer, hoy);
+    console.log(`✅ [8:00 AM Perú] Sincronización diaria de reportes completada.`);
+  } catch (err) {
+    console.error(`❌ Error en cron diario de reportes (8:00 AM):`, err.message);
+  }
+}, {
+  timezone: 'America/Lima'
+});
+console.log(`⏰ Cron [Reporte Diario Mantra] programado para ejecutarse todos los días a las 08:00 AM (America/Lima).`);
 
 // Endpoint Webhook para recibir notificaciones por evento/cambio de estado
 app.post('/webhook/estado-cambiado', async (req, res) => {
