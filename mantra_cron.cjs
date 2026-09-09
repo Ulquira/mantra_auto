@@ -69,7 +69,28 @@ async function runCron() {
     }
 
     // 2. Procesamiento de Reprogramaciones (SOLO AVERIAS)
-    console.log("\n--- Procesando Reprogramaciones (SOLO AVERIAS) ---");
+    await runReprogramacionesCron();
+
+  } catch (err) {
+    console.error("❌ Error en runCron:", err.message);
+  } finally {
+    isCronRunning = false;
+    console.log("\nProceso finalizado.");
+  }
+}
+
+let isReprogRunning = false;
+
+async function runReprogramacionesCron() {
+  if (isReprogRunning) {
+    console.log('[REPROG] Ejecución anterior de reprogramaciones en curso. Omitiendo ciclo...');
+    return;
+  }
+  isReprogRunning = true;
+
+  try {
+    await ensureLogTableExists(pool);
+
     const [reprogs] = await pool.query(`
       SELECT r.id as reprog_id, r.fecha_solicitada, r.turno, r.motivo as motivo_reprog, t.*, ts.Tipo as CategoriaServicioMantra
       FROM reprogramaciones r
@@ -85,44 +106,43 @@ async function runCron() {
     `);
 
     if (reprogs.length === 0) {
-      console.log("✔ No hay nuevas reprogramaciones pendientes de notificar.");
-    } else {
-      console.log(`Encontradas ${reprogs.length} reprogramacion(es) pendiente(s).`);
-      
-      for (const reprog of reprogs) {
-        const reprogContext = {
-          id: reprog.reprog_id,
-          fecha_solicitada: reprog.fecha_solicitada,
-          turno: reprog.turno
-        };
+      return;
+    }
 
-        const result = await sendReprogramacionNotification(reprogContext, reprog);
-        
-        // Guardamos en el log usando el ID de la reprogramación como OrdenId para no chocar con los logs normales
+    console.log(`\n--- [REPROG] Encontradas ${reprogs.length} reprogramacion(es) pendiente(s) (SOLO AVERIAS) ---`);
+    
+    for (const reprog of reprogs) {
+      const reprogContext = {
+        id: reprog.reprog_id,
+        fecha_solicitada: reprog.fecha_solicitada,
+        turno: reprog.turno
+      };
+
+      const result = await sendReprogramacionNotification(reprogContext, reprog);
+      
+      if (!result.skipped) {
         await pool.query(
           'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
           [reprog.reprog_id, reprog.CodiSegui || null, 'Reprogramacion', result.success, result.errorDetail]
         );
+      }
 
-        if (result.success && !result.skipped) {
-          console.log(`✔ Log de Reprogramación (ID: ${reprog.reprog_id}) guardado exitosamente.`);
-        } else if (result.skipped) {
-          console.log(`- Reprogramación (ID: ${reprog.reprog_id}) omitida (${result.errorDetail}).`);
-        } else {
-          console.log(`❌ Reprogramación (ID: ${reprog.reprog_id}) falló. El error se ha guardado.`);
-        }
+      if (result.success && !result.skipped) {
+        console.log(`✔ Log de Reprogramación (ID: ${reprog.reprog_id}) guardado exitosamente.`);
+      } else if (result.skipped) {
+        console.log(`- Reprogramación (ID: ${reprog.reprog_id}) omitida (${result.errorDetail}).`);
+      } else {
+        console.log(`❌ Reprogramación (ID: ${reprog.reprog_id}) falló. El error se ha guardado.`);
       }
     }
-
   } catch (err) {
-    console.error("❌ Error en runCron:", err.message);
+    console.error("❌ Error en runReprogramacionesCron:", err.message);
   } finally {
-    isCronRunning = false;
-    console.log("\nProceso finalizado.");
+    isReprogRunning = false;
   }
 }
 
-module.exports = { runCron };
+module.exports = { runCron, runReprogramacionesCron };
 
 // Permitir ejecutarlo directamente desde la terminal
 if (require.main === module) {

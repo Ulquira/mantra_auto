@@ -11,17 +11,17 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// Nuevo Cron basado en Cola (se ejecuta cada 30 segundos)
+// Cron basado en Cola (se ejecuta cada 30 segundos de manera controlada)
 cron.schedule('*/30 * * * * *', async () => {
   await runQueueCron();
 });
 console.log(`⏰ Cron [Cola Eventos] activado. Escaneando la cola cada 30 segundos...`);
 
-// Cron de monitoreo de Testmantra y Reprogramaciones (se ejecuta cada minuto)
+// Cron de barrido por tramos horarios (se ejecuta cada minuto para capturar órdenes programadas sin evento en cola)
 cron.schedule('* * * * *', async () => {
   await runCron();
 });
-console.log(`⏰ Cron [Monitoreo General] activado. Escaneando tablas cada minuto...`);
+console.log(`⏰ Cron [Barrido Tramos + Reprogramaciones] activado. Escaneando cada minuto...`);
 
 // Endpoint Webhook para recibir notificaciones por evento/cambio de estado
 app.post('/webhook/estado-cambiado', async (req, res) => {

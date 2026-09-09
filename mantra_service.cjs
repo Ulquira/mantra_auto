@@ -163,6 +163,20 @@ async function sendMantraNotification(orden) {
     return { success: true, skipped: true, errorDetail: `Notificación omitida: Producto no es AVERIAS (Tipo: '${categoria || 'Sin mapear'}').` };
   }
 
+  // Verificación estricta de deduplicación antes de emitir a la API de Mantra
+  const [existing] = await pool.query(`
+    SELECT id FROM LOG_NOTIFICACIONES_WSP
+    WHERE (OrdenId = ? OR (CodiSegui = ? AND CodiSegui IS NOT NULL AND CodiSegui <> ''))
+      AND DATE(fecha_envio) = CURDATE()
+      AND EnviadoExitosamente = 1
+    LIMIT 1
+  `, [orden.OrdenId, orden.CodiSegui || '']);
+
+  if (existing.length > 0) {
+    console.log(`[DEDUP SKIP] La orden ${orden.OrdenId} (Ticket: ${orden.CodiSegui || 'N/A'}) ya fue notificada exitosamente hoy. Omitiendo.`);
+    return { success: true, skipped: true, errorDetail: 'Omitido: Ya fue notificado hoy.' };
+  }
+
   const tipoServicio = 'Averias';
   const credentials = MANTRA_CONFIG[tipoServicio];
   const sectorOperativo = (orden['Sector Operativo'] || '').toUpperCase();
@@ -233,6 +247,20 @@ async function sendReprogramacionNotification(reprog, orden) {
   if (categoria !== 'AVERIAS') {
     console.log(`[SKIP] La reprogramación no es de tipo AVERIAS (Tipo actual: '${categoria || 'Sin mapear'}').`);
     return { success: true, skipped: true, errorDetail: `Reprogramación omitida: Producto no es AVERIAS (Tipo: '${categoria || 'Sin mapear'}').` };
+  }
+
+  // Verificación de deduplicación para reprogramaciones
+  const [existingReprog] = await pool.query(`
+    SELECT id FROM LOG_NOTIFICACIONES_WSP
+    WHERE OrdenId = ?
+      AND EstadoNotificado = 'Reprogramacion'
+      AND EnviadoExitosamente = 1
+    LIMIT 1
+  `, [reprog.id]);
+
+  if (existingReprog.length > 0) {
+    console.log(`[DEDUP SKIP] La reprogramación ID ${reprog.id} ya fue notificada previamente. Omitiendo.`);
+    return { success: true, skipped: true, errorDetail: 'Omitido: Reprogramación ya fue notificada previamente.' };
   }
 
   const tipoServicio = 'Averias';
@@ -365,15 +393,18 @@ async function processOrderById(ordenId) {
     const row = rows[0];
     const result = await sendMantraNotification(row);
 
-    await pool.query(
-      'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
-      [row.OrdenId, row.CodiSegui || null, row.Estado, result.success, result.errorDetail]
-    );
+    if (!result.skipped) {
+      await pool.query(
+        'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
+        [row.OrdenId, row.CodiSegui || null, row.Estado, result.success, result.errorDetail]
+      );
+    }
 
     return {
       success: result.success,
       ordenId: row.OrdenId,
       estado: row.Estado,
+      skipped: !!result.skipped,
       errorDetail: result.errorDetail
     };
   } catch (err) {
@@ -452,10 +483,12 @@ async function runQueueCron() {
     for (const row of rows) {
       const result = await sendMantraNotification(row);
       
-      await pool.query(
-        'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
-        [row.OrdenId, row.CodiSegui || null, row.Estado, result.success, result.errorDetail]
-      );
+      if (!result.skipped) {
+        await pool.query(
+          'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
+          [row.OrdenId, row.CodiSegui || null, row.Estado, result.success, result.errorDetail]
+        );
+      }
 
       // Eliminamos de la cola
       await pool.query('DELETE FROM COLA_NOTIFICACIONES_MANTRA WHERE id = ?', [row.colaId]);
