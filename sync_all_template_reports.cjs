@@ -60,31 +60,20 @@ async function syncTemplateReport(grupoKey, templateId, alias, fromDate, toDate)
       for (const item of rows) {
         await pool.query(`
           INSERT INTO REPORTE_PLANTILLAS_MANTRA (
-            contacto_id, nombre, telefono, codigo_pais, email,
+            contacto_id, nombre, telefono, email,
             agente_asignado, enviado_por,
-            custom_1, custom_2, custom_3, custom_4, custom_5,
-            custom_6, custom_7, custom_8, custom_9, custom_10,
+            codigo_pedido,
             creado, fecha_envio, estado_mensaje, estado_chat,
             respuesta_boton, fecha_respuesta_boton, vendor_id,
             template_id, grupo_servicio, nombre_plantilla_alias
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON DUPLICATE KEY UPDATE
             nombre = VALUES(nombre),
             telefono = VALUES(telefono),
-            codigo_pais = VALUES(codigo_pais),
             email = VALUES(email),
             agente_asignado = VALUES(agente_asignado),
             enviado_por = VALUES(enviado_por),
-            custom_1 = VALUES(custom_1),
-            custom_2 = VALUES(custom_2),
-            custom_3 = VALUES(custom_3),
-            custom_4 = VALUES(custom_4),
-            custom_5 = VALUES(custom_5),
-            custom_6 = VALUES(custom_6),
-            custom_7 = VALUES(custom_7),
-            custom_8 = VALUES(custom_8),
-            custom_9 = VALUES(custom_9),
-            custom_10 = VALUES(custom_10),
+            codigo_pedido = VALUES(codigo_pedido),
             creado = VALUES(creado),
             fecha_envio = VALUES(fecha_envio),
             estado_mensaje = VALUES(estado_mensaje),
@@ -98,20 +87,10 @@ async function syncTemplateReport(grupoKey, templateId, alias, fromDate, toDate)
           item._id || item.contactId,
           item.name || null,
           item.phone ? String(item.phone) : '',
-          item.countryCode || '51',
           item.email || null,
           item.agentName || null,
           item.sentBy || null,
-          item.custom_1 || null,
-          item.custom_2 || null,
-          item.custom_3 || null,
-          item.custom_4 || null,
-          item.custom_5 || null,
-          item.custom_6 || null,
-          item.custom_7 || null,
-          item.custom_8 || null,
-          item.custom_9 || null,
-          item.custom_10 || null,
+          item.custom_1 || null, // custom_1: Código de Pedido / Ticket
           parseSqlTimestamp(item.createdAt),
           parseSqlTimestamp(item.msgSentAt),
           item.msgStatus || null,
@@ -218,7 +197,7 @@ if (require.main === module) {
   syncAllTemplates(fromDate, toDate).then(async () => {
     // Mostrar vista de los primeros 10 registros replicados
     const [sample] = await pool.query(`
-      SELECT contacto_id, nombre, telefono, custom_1 as Ticket, custom_2 as Fecha, custom_3 as Horario, 
+      SELECT contacto_id, nombre, telefono, codigo_pedido, 
              estado_mensaje, respuesta_boton, nombre_plantilla_alias, DATE_FORMAT(creado, '%Y-%m-%d %H:%i:%s') as f_creado
       FROM REPORTE_PLANTILLAS_MANTRA
       ORDER BY id DESC
