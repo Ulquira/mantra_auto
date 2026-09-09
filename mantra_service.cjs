@@ -58,8 +58,37 @@ function formatDateSpanish(rawDate) {
   if (!rawDate) return "fecha por confirmar";
   const dateObj = new Date(rawDate);
   if (isNaN(dateObj.getTime())) return String(rawDate);
+  const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
   const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-  return `${dateObj.getUTCDate()} de ${meses[dateObj.getUTCMonth()]}`;
+  
+  const diaSemana = dias[dateObj.getUTCDay()];
+  const diaMes = dateObj.getUTCDate();
+  const mes = meses[dateObj.getUTCMonth()];
+  const anio = dateObj.getUTCFullYear();
+  
+  return `${diaSemana} ${diaMes} de ${mes} ${anio}`;
+}
+
+function formatTitleCase(str) {
+  if (!str || typeof str !== 'string') return "";
+  const minorWords = new Set(['de', 'del', 'la', 'las', 'el', 'los', 'en', 'y', 'a', 'o', 'u', 'e', 'con', 'por', 'sin', 'para', 'al']);
+  
+  return str.toLowerCase().replace(/[a-záéíóúñ0-9]+/gi, (word, offset, fullText) => {
+    const isAfterParen = offset > 0 && fullText[offset - 1] === '(';
+    if (offset > 0 && !isAfterParen && minorWords.has(word.toLowerCase())) {
+      return word.toLowerCase();
+    }
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  });
+}
+
+function formatRangoHorario(rawTime) {
+  if (!rawTime) return "08:00-12:00";
+  const t = String(rawTime).trim();
+  if (t.includes('08:') || t.includes('08:00') || t.includes('8AM')) return "08:00-12:00";
+  if (t.includes('12:') || t.includes('12:00') || t.includes('12PM') || t.includes('12pm')) return "12:00-16:00";
+  if (t.includes('16:') || t.includes('16:00') || t.includes('4PM') || t.includes('4pm')) return "16:00-20:00";
+  return t;
 }
 
 function buildHomologatedCustomData(orden, overrides = {}) {
@@ -74,13 +103,13 @@ function buildHomologatedCustomData(orden, overrides = {}) {
   let rangoHorario = overrides.rangoHorario;
   if (!rangoHorario) {
     const t = orden.f_time || (orden['F.Soli'] ? String(orden['F.Soli']).slice(11, 19) : '');
-    if (t && t.startsWith('08')) rangoHorario = "8AM - 12PM";
-    else if (t && t.startsWith('12')) rangoHorario = "12PM - 4PM";
-    else if (t && t.startsWith('16')) rangoHorario = "4PM - 8PM";
-    else rangoHorario = t || "horario por confirmar";
+    rangoHorario = formatRangoHorario(t);
+  } else {
+    rangoHorario = formatRangoHorario(rangoHorario);
   }
 
-  const direccion = orden.Direccion ? orden.Direccion.split('||')[0].trim() : "";
+  const rawDireccion = orden.Direccion ? orden.Direccion.split('||')[0].trim() : "";
+  const direccion = formatTitleCase(rawDireccion);
   const trackingLink = orden.token ? `https://go.win.pe/seguimiento/${orden.token}` : (orden.link || '');
   const plan = extractPlanName(orden.IdenServi) || orden.Producto || "tu plan Win";
   
@@ -289,7 +318,7 @@ async function sendReprogramacionNotification(reprog, orden) {
   const tagIdToUse = isOeste2 ? credentials.TAG_TRAKING_ID : null;
 
   const fechaReprog = formatDateSpanish(reprog.fecha_solicitada);
-  const rangoHorario = reprog.turno || "horario por confirmar";
+  const rangoHorario = formatRangoHorario(reprog.turno || "08:00-12:00");
 
   const rawPhone = orden.TeleMovilNume || '';
   const phone = rawPhone.replace(/\D/g, '').slice(-9);
@@ -297,7 +326,8 @@ async function sendReprogramacionNotification(reprog, orden) {
   const firstName = extractFirstName(fullName);
 
   const ticket = orden.CodiSegui ? String(orden.CodiSegui).trim() : String(orden.OrdenId || '');
-  const direccion = orden.Direccion ? orden.Direccion.split('||')[0].trim() : "";
+  const rawDireccion = orden.Direccion ? orden.Direccion.split('||')[0].trim() : "";
+  const direccion = formatTitleCase(rawDireccion);
   const trackingLink = orden.token ? `https://go.win.pe/seguimiento/${orden.token}` : (orden.link || '');
   const plan = extractPlanName(orden.IdenServi) || orden.Producto || "tu plan Win";
   const fechaVentaRaw = orden.FechaUltiEsta || orden.f_visita || orden.FechaIniVisi;
@@ -527,5 +557,9 @@ module.exports = {
   sendMantraNotification,
   sendReprogramacionNotification,
   processOrderById,
-  runQueueCron
+  runQueueCron,
+  buildHomologatedCustomData,
+  formatDateSpanish,
+  formatTitleCase,
+  formatRangoHorario
 };
