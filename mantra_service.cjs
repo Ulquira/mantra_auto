@@ -9,7 +9,8 @@ const MANTRA_CONFIG = {
     TEMPLATE_ID_DEFAULT: "6875723e1cb8562af849400e",
     TEMPLATE_ID_OESTE2: "6a7a457736ef53a657fc03ed",
     TEMPLATE_REPROG_ID: "6a9847e14f6db1b188cd5ce3",
-    TAG_TRAKING_ID: "4c888a1a-b530-40e4-abdf-9bb941eb768f"
+    TAG_TRAKING_ID: "4c888a1a-b530-40e4-abdf-9bb941eb768f",
+    TAG_BOT_ENVIO_ID: "ae456b1a-c815-4880-86df-d6b4ab2703c4"
   },
   Averias: {
     GROUP_ID: "68508b455ba42fd0a6660300",
@@ -17,7 +18,8 @@ const MANTRA_CONFIG = {
     TEMPLATE_ID_DEFAULT: "68fac2ea40478663c8b51c36",
     TEMPLATE_ID_OESTE2: "6a90c047e91ab8e19836a561",
     TEMPLATE_REPROG_ID: "6a984a1d5781ebbf9f145a6b",
-    TAG_TRAKING_ID: "638b55de-0565-4a1f-b9eb-a914f450a7fc"
+    TAG_TRAKING_ID: "638b55de-0565-4a1f-b9eb-a914f450a7fc",
+    TAG_BOT_ENVIO_ID: "25371b8b-3844-4243-8ee2-1796fc058029"
   }
 };
 
@@ -108,9 +110,19 @@ function buildHomologatedCustomData(orden, overrides = {}) {
     custom_10: canalVenta
   };
 
-  // Si se detecta OESTE 2 / OESTE -2, se añade la etiqueta TRAKING
-  if (overrides.tagId) {
-    data.tagIds = [overrides.tagId];
+  // Manejo de etiquetas: siempre agregar BotEnvio + TRAKING si corresponde
+  const tagList = [];
+  if (overrides.tagIds && Array.isArray(overrides.tagIds)) {
+    tagList.push(...overrides.tagIds);
+  } else if (overrides.tagId) {
+    tagList.push(overrides.tagId);
+  }
+  if (overrides.botEnvioTagId && !tagList.includes(overrides.botEnvioTagId)) {
+    tagList.push(overrides.botEnvioTagId);
+  }
+
+  if (tagList.length > 0) {
+    data.tagIds = tagList;
   }
 
   return { firstName, fullName, phone, data };
@@ -185,12 +197,13 @@ async function sendMantraNotification(orden) {
   const tagIdToUse = isOeste2 ? credentials.TAG_TRAKING_ID : null;
 
   const { firstName, fullName, phone, data: customData } = buildHomologatedCustomData(orden, {
-    tagId: tagIdToUse
+    tagId: tagIdToUse,
+    botEnvioTagId: credentials.TAG_BOT_ENVIO_ID
   });
 
   console.log(`\n=================================================`);
   console.log(`Procesando Orden: ${orden.OrdenId} - ${firstName} (${phone}) [Nombre completo: ${fullName}]`);
-  console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Sector: ${sectorOperativo || 'N/A'} | Template: ${templateIdToUse} | Etiqueta TRAKING: ${isOeste2 ? 'SÍ (ID: ' + tagIdToUse + ')' : 'NO'}`);
+  console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Sector: ${sectorOperativo || 'N/A'} | Template: ${templateIdToUse} | Etiquetas: BotEnvio (${credentials.TAG_BOT_ENVIO_ID})${isOeste2 ? ' + TRAKING (' + tagIdToUse + ')' : ''}`);
   console.log(`=================================================`);
 
   const contactPayload = {
@@ -310,13 +323,15 @@ async function sendReprogramacionNotification(reprog, orden) {
     custom_10: trackingLink      // Link seguimiento
   };
 
+  const tagList = [credentials.TAG_BOT_ENVIO_ID];
   if (tagIdToUse) {
-    customData.tagIds = [tagIdToUse];
+    tagList.push(tagIdToUse);
   }
+  customData.tagIds = tagList;
 
   console.log(`\n=================================================`);
   console.log(`Procesando Reprogramación ID: ${reprog.id} | Orden: ${orden.OrdenId} - ${firstName} (${phone}) [Nombre completo: ${fullName}]`);
-  console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Template Asignado: ${credentials.TEMPLATE_REPROG_ID} | Etiqueta TRAKING: ${isOeste2 ? 'SÍ' : 'NO'}`);
+  console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Template Asignado: ${credentials.TEMPLATE_REPROG_ID} | Etiquetas: BotEnvio (${credentials.TAG_BOT_ENVIO_ID})${isOeste2 ? ' + TRAKING' : ''}`);
   console.log(`=================================================`);
 
   const contactPayload = {

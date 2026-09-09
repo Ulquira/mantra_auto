@@ -46,13 +46,13 @@ const { pool, MAIN_TABLE } = require('./mantra_service.cjs');
     `, [
       TEST_ORDEN_ID,
       'TEST-REGULAR-01',
-      'TONNY REGULAR TEST',
+      'TONNY BOTENVIO TEST',
       TEST_PHONE,
       'AVERIAS',
       'Agendada',
       fSoliCompleta,
       'Av. República de Panamá 1234, San Isidro',
-      'LIMA - SUR 1',
+      'LIMA - OESTE 2',
       'Paquete: Plan Win Fibra 500 Mbps'
     ]);
 
