@@ -454,8 +454,9 @@ async function runQueueCron() {
     `);
 
     // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola, sean de HOY, correspondan al tramo, sean 'AVERIAS' y no tengan envío HOY
+    // IMPORTANTE: GROUP BY t.OrdenId para evitar duplicados si un mismo OrdenId ingresó más de una vez a la cola
     const queryStr = `
-      SELECT t.*, DATE(t.\`F.Soli\`) as f_date, TIME(t.\`F.Soli\`) as f_time, c.id as colaId, ts.Tipo as CategoriaServicioMantra
+      SELECT t.*, DATE(t.\`F.Soli\`) as f_date, TIME(t.\`F.Soli\`) as f_time, MIN(c.id) as colaId, ts.Tipo as CategoriaServicioMantra
       FROM COLA_NOTIFICACIONES_MANTRA c
       INNER JOIN ${MAIN_TABLE} t ON c.ordenId = t.OrdenId
       INNER JOIN TipoServicio ts ON t.Producto = ts.Servicio
@@ -468,7 +469,8 @@ async function runQueueCron() {
         AND DATE(t.\`F.Soli\`) = CURDATE() 
         AND TIME(t.\`F.Soli\`) LIKE ? 
         AND l.id IS NULL
-      ORDER BY c.id ASC LIMIT 50
+      GROUP BY t.OrdenId
+      ORDER BY colaId ASC LIMIT 50
     `;
     const searchPattern = `${tramoFiltro}%`;
 
@@ -478,7 +480,7 @@ async function runQueueCron() {
       return;
     }
 
-    console.log(`[QUEUE] Evaluando Tramo Horario [${tramoFiltro}:00]. Procesando ${rows.length} órdenes en cola desde ${MAIN_TABLE}.`);
+    console.log(`[QUEUE] Evaluando Tramo Horario [${tramoFiltro}:00]. Procesando ${rows.length} órdenes únicas en cola desde ${MAIN_TABLE}.`);
 
     for (const row of rows) {
       const result = await sendMantraNotification(row);
@@ -490,8 +492,8 @@ async function runQueueCron() {
         );
       }
 
-      // Eliminamos de la cola
-      await pool.query('DELETE FROM COLA_NOTIFICACIONES_MANTRA WHERE id = ?', [row.colaId]);
+      // Eliminamos todas las instancias de esta orden en la cola
+      await pool.query('DELETE FROM COLA_NOTIFICACIONES_MANTRA WHERE ordenId = ?', [row.OrdenId]);
       console.log(`[QUEUE] Orden ${row.OrdenId} procesada y eliminada de la cola.`);
     }
   } catch (err) {
