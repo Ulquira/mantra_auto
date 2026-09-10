@@ -541,6 +541,45 @@ async function runQueueCron() {
       await pool.query('DELETE FROM COLA_NOTIFICACIONES_MANTRA WHERE ordenId = ?', [row.OrdenId]);
       console.log(`[QUEUE] Orden ${row.OrdenId} procesada y eliminada de la cola.`);
     }
+
+    // 4. Procesamiento de Reprogramaciones (SOLO AVERIAS)
+    const [reprogs] = await pool.query(`
+      SELECT r.id as reprog_id, r.fecha_solicitada, r.turno, r.motivo as motivo_reprog, t.*, ts.Tipo as CategoriaServicioMantra
+      FROM reprogramaciones r
+      JOIN ${MAIN_TABLE} t ON r.token = t.token
+      INNER JOIN TipoServicio ts ON t.Producto = ts.Servicio
+      LEFT JOIN LOG_NOTIFICACIONES_WSP l
+        ON l.OrdenId = r.id AND l.EstadoNotificado = 'Reprogramacion' AND l.EnviadoExitosamente = 1
+      WHERE ts.Tipo = 'AVERIAS'
+        AND t.Estado IN ('Agendada', 'Pendiente', 'En camino')
+        AND DATE(r.fecha_solicitada) >= CURDATE()
+        AND l.id IS NULL
+      LIMIT 20
+    `);
+
+    if (reprogs.length > 0) {
+      console.log(`[QUEUE] Procesando ${reprogs.length} reprogramacion(es) pendiente(s)...`);
+      for (const reprog of reprogs) {
+        const reprogContext = {
+          id: reprog.reprog_id,
+          fecha_solicitada: reprog.fecha_solicitada,
+          turno: reprog.turno
+        };
+
+        const result = await sendReprogramacionNotification(reprogContext, reprog);
+        
+        if (!result.skipped) {
+          await pool.query(
+            'INSERT INTO LOG_NOTIFICACIONES_WSP (OrdenId, CodiSegui, EstadoNotificado, EnviadoExitosamente, DetallesError) VALUES (?, ?, ?, ?, ?)',
+            [reprog.reprog_id, reprog.CodiSegui || null, 'Reprogramacion', result.success, result.errorDetail]
+          );
+        }
+
+        if (result.success && !result.skipped) {
+          console.log(`✔ Log de Reprogramación (ID: ${reprog.reprog_id}) guardado exitosamente.`);
+        }
+      }
+    }
   } catch (err) {
     console.error("❌ Error en QueueCron:", err.message);
   } finally {

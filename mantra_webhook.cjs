@@ -12,17 +12,11 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// Cron basado en Cola (se ejecuta cada 30 segundos de manera controlada)
+// Cron basado en Cola y Reprogramaciones (motor único de despacho, se ejecuta cada 30 segundos)
 cron.schedule('*/30 * * * * *', async () => {
   await runQueueCron();
 });
-console.log(`⏰ Cron [Cola Eventos] activado. Escaneando la cola cada 30 segundos...`);
-
-// Cron de barrido por tramos horarios (se ejecuta cada minuto para capturar órdenes programadas sin evento en cola)
-cron.schedule('* * * * *', async () => {
-  await runCron();
-});
-console.log(`⏰ Cron [Barrido Tramos + Reprogramaciones] activado. Escaneando cada minuto...`);
+console.log(`⏰ Cron [Cola Eventos + Reprogramaciones] activado. Escaneando la cola cada 30 segundos...`);
 
 // Cron Diario de Sincronización de Reportes de Mantra (8:00 AM hora Perú)
 cron.schedule('0 8 * * *', async () => {
