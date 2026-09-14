@@ -1,30 +1,58 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
-// Mapeo dinámico de Credenciales y Plantillas según el Tipo de Servicio
-const MANTRA_CONFIG = {
-  Instalacion: {
-    GROUP_ID: "685dc70e53dd0ac2492c69ca",
-    API_KEY: "3d0d59f1-f3ea-47be-b5b0-d7ffca33817d",
-    TEMPLATE_ID_DEFAULT: "6875723e1cb8562af849400e",
-    TEMPLATE_ID_OESTE2: "6a7a457736ef53a657fc03ed",
-    TEMPLATE_REPROG_ID: "6a9847e14f6db1b188cd5ce3",
-    TAG_TRAKING_ID: "4c888a1a-b530-40e4-abdf-9bb941eb768f",
-    TAG_BOT_ENVIO_ID: "ae456b1a-c815-4880-86df-d6b4ab2703c4"
-  },
-  Averias: {
-    GROUP_ID: "68508b455ba42fd0a6660300",
-    API_KEY: "618684ea-0e61-478f-9b22-bc0fd8b8a934",
-    TEMPLATE_ID_DEFAULT: "68fac2ea40478663c8b51c36",
-    TEMPLATE_ID_OESTE2: "6a90c047e91ab8e19836a561",
-    TEMPLATE_REPROG_ID: "6a984a1d5781ebbf9f145a6b",
-    TAG_TRAKING_ID: "638b55de-0565-4a1f-b9eb-a914f450a7fc",
-    TAG_BOT_ENVIO_ID: "25371b8b-3844-4243-8ee2-1796fc058029"
-  }
-};
+// Caché en memoria para reglas de tablas de control (TTL: 2 minutos)
+let cacheConfig = null;
+let cacheSectores = null;
+let lastCacheUpdate = 0;
+const CACHE_TTL_MS = 2 * 60 * 1000;
 
-const URL_CREATE_CONTACT = "https://wbpback2pro2.mantra.chat/contacts/new";
-const URL_SEND_TEMPLATE = "https://wbpback2pro2.mantra.chat/contacts/send";
+async function getControlTables(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && cacheConfig && cacheSectores && (now - lastCacheUpdate < CACHE_TTL_MS)) {
+    return { configs: cacheConfig, sectores: cacheSectores };
+  }
+
+  try {
+    const [configs] = await pool.query('SELECT * FROM CONFIG_PLANTILLAS_MANTRA');
+    const [sectores] = await pool.query('SELECT * FROM SECTORES_PILOTO_TRACKING WHERE activo = 1');
+    
+    cacheConfig = configs;
+    cacheSectores = sectores;
+    lastCacheUpdate = now;
+    return { configs: cacheConfig, sectores: cacheSectores };
+  } catch (err) {
+    console.error('❌ Error cargando tablas de control desde MySQL:', err.message);
+    if (cacheConfig && cacheSectores) {
+      return { configs: cacheConfig, sectores: cacheSectores };
+    }
+    throw err;
+  }
+}
+
+function resolveServiceType(orden) {
+  const categoria = (orden.CategoriaServicioMantra || '').toUpperCase();
+  if (categoria === 'AVERIAS' || categoria === 'POSTVENTA') return 'AVERIAS';
+  if (categoria === 'INSTALACION' || categoria === 'PROVINCIA') return 'INSTALACION';
+  
+  const tipoOrden = (orden.TipoOrden || '').toUpperCase();
+  const producto = (orden.Producto || '').toUpperCase();
+  if (tipoOrden.includes('AVERIA') || tipoOrden.includes('VISITA') || producto.includes('AVERIA')) {
+    return 'AVERIAS';
+  }
+  return 'INSTALACION';
+}
+
+function isSectorPiloto(tipoServicio, sectorOperativo, sectoresList) {
+  if (!sectorOperativo) return false;
+  const sectorClean = String(sectorOperativo).toUpperCase().trim();
+  
+  return sectoresList.some(s => {
+    if (s.tipo_servicio !== tipoServicio || s.activo !== 1) return false;
+    const target = String(s.sector_operativo).toUpperCase().trim();
+    return sectorClean === target || sectorClean.includes(target) || target.includes(sectorClean);
+  });
+}
 
 function extractPlanName(idenServi) {
   if (!idenServi) return "tu plan Win";
@@ -91,7 +119,7 @@ function formatRangoHorario(rawTime) {
   return t;
 }
 
-function buildHomologatedCustomData(orden, overrides = {}) {
+function buildDynamicCustomData(orden, cfg, overrides = {}) {
   const rawPhone = orden.TeleMovilNume || '';
   const phone = rawPhone.replace(/\D/g, '').slice(-9);
   const fullName = orden.ClienteFinal || '';
@@ -113,41 +141,49 @@ function buildHomologatedCustomData(orden, overrides = {}) {
   const trackingLink = orden.token ? `https://go.win.pe/seguimiento/${orden.token}` : (orden.link || '');
   const plan = extractPlanName(orden.IdenServi) || orden.Producto || "tu plan Win";
   
-  // custom_8: FechaVenta (FechaUltiEsta o f_visita)
   const fechaVentaRaw = orden.FechaUltiEsta || orden.f_visita || orden.FechaIniVisi;
   const fechaVenta = fechaVentaRaw ? formatDateSpanish(fechaVentaRaw) : fecha;
-
-  // custom_9: Departamento / Provincia / Distrito
   const depProvDist = [orden.Region, orden.Provincia, orden.Zona || orden.Localidad].filter(Boolean).join(' / ') || (orden.Localidad || 'LIMA');
-
-  // custom_10: Canal de venta / Empresa
   const canalVenta = orden.Empresa || orden['Sector Operativo'] || 'WIN';
+
+  const valueMap = {
+    'TICKET': ticket,
+    'FECHA': fecha,
+    'HORARIO': rangoHorario,
+    'DIRECCION': direccion,
+    'LINK': trackingLink,
+    'PLAN': plan,
+    'NOMBRE': firstName,
+    'FECHA_VENTA': fechaVenta,
+    'UBICACION': depProvDist,
+    'CANAL': canalVenta
+  };
+
+  function resolveVal(key, fallback = null) {
+    if (!key) return fallback;
+    const upper = String(key).toUpperCase().trim();
+    return valueMap[upper] !== undefined ? valueMap[upper] : fallback;
+  }
 
   const data = {
     name: firstName,
     phone: phone,
     countryCode: "51",
-    custom_1: ticket,
-    custom_2: fecha,
-    custom_3: rangoHorario,
-    custom_4: direccion,
-    custom_5: trackingLink,
-    custom_6: plan,
-    custom_7: firstName,
-    custom_8: fechaVenta,
-    custom_9: depProvDist,
-    custom_10: canalVenta
+    custom_1: resolveVal(cfg.custom_1_campo, ticket),
+    custom_2: resolveVal(cfg.custom_2_campo, fecha),
+    custom_3: resolveVal(cfg.custom_3_campo, rangoHorario),
+    custom_4: resolveVal(cfg.custom_4_campo, direccion),
+    custom_5: resolveVal(cfg.custom_5_campo, trackingLink),
+    custom_6: resolveVal(cfg.custom_6_campo, plan),
+    custom_7: resolveVal(cfg.custom_7_campo, firstName),
+    custom_10: resolveVal(cfg.custom_10_campo, trackingLink)
   };
 
   // Manejo de etiquetas: siempre agregar BotEnvio + TRAKING si corresponde
   const tagList = [];
-  if (overrides.tagIds && Array.isArray(overrides.tagIds)) {
-    tagList.push(...overrides.tagIds);
-  } else if (overrides.tagId) {
-    tagList.push(overrides.tagId);
-  }
-  if (overrides.botEnvioTagId && !tagList.includes(overrides.botEnvioTagId)) {
-    tagList.push(overrides.botEnvioTagId);
+  if (cfg.tag_tracking_id) tagList.push(cfg.tag_tracking_id);
+  if (cfg.tag_bot_envio_id && !tagList.includes(cfg.tag_bot_envio_id)) {
+    tagList.push(cfg.tag_bot_envio_id);
   }
 
   if (tagList.length > 0) {
@@ -196,15 +232,23 @@ async function ensureLogTableExists(dbOrPool) {
 }
 
 async function sendMantraNotification(orden) {
-  // Cruce de datos basado en TipoServicioBD: SOLO PERMITIR 'AVERIAS'
-  const categoria = (orden.CategoriaServicioMantra || '').toUpperCase();
+  const { configs, sectores } = await getControlTables();
+  const tipoServicio = resolveServiceType(orden);
+  const sectorOperativo = (orden['Sector Operativo'] || '').toUpperCase();
 
-  if (categoria !== 'AVERIAS') {
-    console.log(`[SKIP] El producto no es de tipo AVERIAS (Tipo actual: '${categoria || 'Sin mapear'}').`);
-    return { success: true, skipped: true, errorDetail: `Notificación omitida: Producto no es AVERIAS (Tipo: '${categoria || 'Sin mapear'}').` };
+  // 1. Determinar si va a la plantilla TRACKING o DEFAULT según SECTORES_PILOTO_TRACKING
+  const enPiloto = isSectorPiloto(tipoServicio, sectorOperativo, sectores);
+  const tipoPlantilla = enPiloto ? 'TRACKING' : 'DEFAULT';
+
+  // 2. Buscar configuración en CONFIG_PLANTILLAS_MANTRA
+  const cfg = configs.find(c => c.tipo_servicio === tipoServicio && c.tipo_plantilla === tipoPlantilla);
+
+  if (!cfg || cfg.activo !== 1) {
+    console.log(`[SKIP] Configuración desactivada o inexistente para ${tipoServicio} (${tipoPlantilla}). Activo: ${cfg ? cfg.activo : 0}`);
+    return { success: true, skipped: true, errorDetail: `Servicio ${tipoServicio} (${tipoPlantilla}) desactivado en CONFIG_PLANTILLAS_MANTRA.` };
   }
 
-  // Verificación estricta de deduplicación antes de emitir a la API de Mantra
+  // 3. Verificación estricta de deduplicación antes de emitir a la API de Mantra
   const [existing] = await pool.query(`
     SELECT id FROM LOG_NOTIFICACIONES_WSP
     WHERE (OrdenId = ? OR (CodiSegui = ? AND CodiSegui IS NOT NULL AND CodiSegui <> ''))
@@ -218,36 +262,21 @@ async function sendMantraNotification(orden) {
     return { success: true, skipped: true, errorDetail: 'Omitido: Ya fue notificado hoy.' };
   }
 
-  const tipoServicio = 'Averias';
-  const credentials = MANTRA_CONFIG[tipoServicio];
-  const sectorOperativo = (orden['Sector Operativo'] || '').toUpperCase();
-  const isLimaOesteTracking = (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE 1')) ||
-                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE 2')) ||
-                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE -1')) ||
-                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE -2')) ||
-                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE-1')) ||
-                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE-2'));
-  const templateIdToUse = isLimaOesteTracking ? credentials.TEMPLATE_ID_OESTE2 : credentials.TEMPLATE_ID_DEFAULT;
-  const tagIdToUse = isLimaOesteTracking ? credentials.TAG_TRAKING_ID : null;
-
-  const { firstName, fullName, phone, data: customData } = buildHomologatedCustomData(orden, {
-    tagId: tagIdToUse,
-    botEnvioTagId: credentials.TAG_BOT_ENVIO_ID
-  });
+  const { firstName, fullName, phone, data: customData } = buildDynamicCustomData(orden, cfg);
 
   console.log(`\n=================================================`);
   console.log(`Procesando Orden: ${orden.OrdenId} - ${firstName} (${phone}) [Nombre completo: ${fullName}]`);
-  console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Sector: ${sectorOperativo || 'N/A'} | Template: ${templateIdToUse} | Etiquetas: BotEnvio (${credentials.TAG_BOT_ENVIO_ID})${isLimaOesteTracking ? ' + TRAKING (' + tagIdToUse + ')' : ''}`);
+  console.log(`[Control Dinámico] Servicio: ${tipoServicio} | Sector: ${sectorOperativo || 'N/A'} | Plantilla: ${cfg.nombre_alias} (${cfg.template_id}) | Piloto: ${enPiloto ? 'SI' : 'NO'}`);
   console.log(`=================================================`);
 
   const contactPayload = {
-    groupId: credentials.GROUP_ID,
-    apiKey: credentials.API_KEY,
+    groupId: cfg.group_id,
+    apiKey: cfg.api_key,
     data: customData
   };
 
   try {
-    console.log("1. Enviando petición para crear/actualizar contacto con variables homologadas y etiquetas...");
+    console.log("1. Enviando petición para crear/actualizar contacto con variables dinámicas...");
     const resContact = await fetch(URL_CREATE_CONTACT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -258,9 +287,9 @@ async function sendMantraNotification(orden) {
     console.log("   Respuesta Servidor (Contacto):", jsonContact.resultOp || jsonContact);
 
     const templatePayload = {
-      groupId: credentials.GROUP_ID,
-      apiKey: credentials.API_KEY,
-      templateId: templateIdToUse,
+      groupId: cfg.group_id,
+      apiKey: cfg.api_key,
+      templateId: cfg.template_id,
       phone: phone,
       countryCode: "51" 
     };
@@ -288,12 +317,15 @@ async function sendMantraNotification(orden) {
 }
 
 async function sendReprogramacionNotification(reprog, orden) {
-  // Evaluamos tipo de servicio basado en tabla TipoServicio: SOLO PERMITIR 'AVERIAS'
-  const categoria = (orden.CategoriaServicioMantra || '').toUpperCase();
+  const { configs } = await getControlTables();
+  const tipoServicio = resolveServiceType(orden);
 
-  if (categoria !== 'AVERIAS') {
-    console.log(`[SKIP] La reprogramación no es de tipo AVERIAS (Tipo actual: '${categoria || 'Sin mapear'}').`);
-    return { success: true, skipped: true, errorDetail: `Reprogramación omitida: Producto no es AVERIAS (Tipo: '${categoria || 'Sin mapear'}').` };
+  // Buscar configuración de REPROGRAMACION en CONFIG_PLANTILLAS_MANTRA
+  const cfg = configs.find(c => c.tipo_servicio === tipoServicio && c.tipo_plantilla === 'REPROGRAMACION');
+
+  if (!cfg || cfg.activo !== 1) {
+    console.log(`[SKIP] Reprogramación desactivada para ${tipoServicio}. Activo: ${cfg ? cfg.activo : 0}`);
+    return { success: true, skipped: true, errorDetail: `Reprogramaciones de ${tipoServicio} desactivadas en CONFIG_PLANTILLAS_MANTRA.` };
   }
 
   // Verificación de deduplicación para reprogramaciones
@@ -310,73 +342,22 @@ async function sendReprogramacionNotification(reprog, orden) {
     return { success: true, skipped: true, errorDetail: 'Omitido: Reprogramación ya fue notificada previamente.' };
   }
 
-  const tipoServicio = 'Averias';
-  const credentials = MANTRA_CONFIG[tipoServicio];
-  
-  if (!credentials.TEMPLATE_REPROG_ID) {
-    console.log(`[SKIP] No hay plantilla de reprogramación configurada para el tipo ${tipoServicio}.`);
-    return { success: true, skipped: true, errorDetail: 'Plantilla de reprogramación no configurada.' };
-  }
-
-  const sectorOperativo = (orden['Sector Operativo'] || '').toUpperCase();
-  const isLimaOesteTracking = (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE 1')) ||
-                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE 2')) ||
-                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE -1')) ||
-                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE -2')) ||
-                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE-1')) ||
-                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE-2'));
-  const tagIdToUse = isLimaOesteTracking ? credentials.TAG_TRAKING_ID : null;
-
   const fechaReprog = formatDateSpanish(reprog.fecha_solicitada);
   const rangoHorario = formatRangoHorario(reprog.turno || "08:00-12:00");
 
-  const rawPhone = orden.TeleMovilNume || '';
-  const phone = rawPhone.replace(/\D/g, '').slice(-9);
-  const fullName = orden.ClienteFinal || '';
-  const firstName = extractFirstName(fullName);
-
-  const ticket = orden.CodiSegui ? String(orden.CodiSegui).trim() : String(orden.OrdenId || '');
-  const rawDireccion = orden.Direccion ? orden.Direccion.split('||')[0].trim() : "";
-  const direccion = formatTitleCase(rawDireccion);
-  const trackingLink = orden.token ? `https://go.win.pe/seguimiento/${orden.token}` : (orden.link || '');
-  const plan = extractPlanName(orden.IdenServi) || orden.Producto || "tu plan Win";
-  const fechaVentaRaw = orden.FechaUltiEsta || orden.f_visita || orden.FechaIniVisi;
-  const fechaVenta = fechaVentaRaw ? formatDateSpanish(fechaVentaRaw) : fechaReprog;
-  const depProvDist = [orden.Region, orden.Provincia, orden.Zona || orden.Localidad].filter(Boolean).join(' / ') || (orden.Localidad || 'LIMA');
-  const canalVenta = orden.Empresa || orden['Sector Operativo'] || 'WIN';
-
-  // Mapeo exacto para la plantilla de Reprogramación:
-  // "Tu visita técnica está programada para el {{custom_1}} (Fecha). Nuestro equipo técnico estará en tu dirección entre las {{custom_2}} (Horario)."
-  const customData = {
-    name: firstName,
-    phone: phone,
-    countryCode: "51",
-    custom_1: fechaReprog,       // Fecha de la nueva cita
-    custom_2: rangoHorario,      // Rango horario/turno
-    custom_3: ticket,            // Ticket / Pedido
-    custom_4: direccion,         // Dirección
-    custom_5: trackingLink,      // Link seguimiento
-    custom_6: plan,              // Plan
-    custom_7: firstName,         // Nombre
-    custom_8: fechaVenta,        // Fecha Venta
-    custom_9: depProvDist,       // Ubicación
-    custom_10: trackingLink      // Link seguimiento
-  };
-
-  const tagList = [credentials.TAG_BOT_ENVIO_ID];
-  if (tagIdToUse) {
-    tagList.push(tagIdToUse);
-  }
-  customData.tagIds = tagList;
+  const { firstName, fullName, phone, data: customData } = buildDynamicCustomData(orden, cfg, {
+    fechaFormateada: fechaReprog,
+    rangoHorario: rangoHorario
+  });
 
   console.log(`\n=================================================`);
   console.log(`Procesando Reprogramación ID: ${reprog.id} | Orden: ${orden.OrdenId} - ${firstName} (${phone}) [Nombre completo: ${fullName}]`);
-  console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Template Asignado: ${credentials.TEMPLATE_REPROG_ID} | Etiquetas: BotEnvio (${credentials.TAG_BOT_ENVIO_ID})${isLimaOesteTracking ? ' + TRAKING' : ''}`);
+  console.log(`[Control Dinámico] Servicio: ${tipoServicio} | Plantilla: ${cfg.nombre_alias} (${cfg.template_id})`);
   console.log(`=================================================`);
 
   const contactPayload = {
-    groupId: credentials.GROUP_ID,
-    apiKey: credentials.API_KEY,
+    groupId: cfg.group_id,
+    apiKey: cfg.api_key,
     data: customData
   };
 
@@ -392,9 +373,9 @@ async function sendReprogramacionNotification(reprog, orden) {
     console.log("   Respuesta Servidor (Contacto):", jsonContact.resultOp || jsonContact);
 
     const templatePayload = {
-      groupId: credentials.GROUP_ID,
-      apiKey: credentials.API_KEY,
-      templateId: credentials.TEMPLATE_REPROG_ID,
+      groupId: cfg.group_id,
+      apiKey: cfg.api_key,
+      templateId: cfg.template_id,
       phone: phone,
       countryCode: "51" 
     };
@@ -478,6 +459,16 @@ async function runQueueCron() {
   isQueueCronRunning = true;
 
   try {
+    const { configs } = await getControlTables();
+    
+    // Obtener los servicios que están activos en CONFIG_PLANTILLAS_MANTRA
+    const activeServices = [...new Set(configs.filter(c => c.activo === 1).map(c => c.tipo_servicio))];
+    
+    if (activeServices.length === 0) {
+      console.log('[QUEUE] Todos los servicios están en activo = 0 en CONFIG_PLANTILLAS_MANTRA. Omitiendo.');
+      return;
+    }
+
     // 1. Validar la hora actual en zona horaria America/Lima
     const options = { timeZone: 'America/Lima', hour12: false, hour: 'numeric' };
     const formatter = new Intl.DateTimeFormat([], options);
@@ -493,7 +484,8 @@ async function runQueueCron() {
       return;
     }
 
-    // 2.1 Limpieza automática de la cola: descartar IDs cuyas fechas no sean HOY, no sean 'AVERIAS' o ya fueron notificados HOY
+    // 2.1 Limpieza automática de la cola: descartar IDs cuyas fechas no sean HOY, servicios inactivos o ya notificados HOY
+    const placeholders = activeServices.map(() => '?').join(',');
     await pool.query(`
       DELETE c FROM COLA_NOTIFICACIONES_MANTRA c
       LEFT JOIN ${MAIN_TABLE} t ON c.ordenId = t.OrdenId
@@ -503,12 +495,12 @@ async function runQueueCron() {
         OR (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
       ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
       WHERE DATE(t.\`F.Soli\`) <> CURDATE() 
-         OR ts.Tipo <> 'AVERIAS' 
+         OR ts.Tipo NOT IN (${placeholders})
          OR ts.Tipo IS NULL
          OR l.id IS NOT NULL
-    `);
+    `, activeServices);
 
-    // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola, sean de HOY, correspondan al tramo, sean 'AVERIAS' y no tengan envío HOY
+    // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola, sean de HOY, correspondan al tramo y pertenezcan a servicios activos
     // IMPORTANTE: GROUP BY t.OrdenId para evitar duplicados si un mismo OrdenId ingresó más de una vez a la cola
     const queryStr = `
       SELECT t.*, DATE(t.\`F.Soli\`) as f_date, TIME(t.\`F.Soli\`) as f_time, MIN(c.id) as colaId, ts.Tipo as CategoriaServicioMantra
@@ -519,7 +511,7 @@ async function runQueueCron() {
         t.OrdenId = l.OrdenId
         OR (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
       ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
-      WHERE ts.Tipo = 'AVERIAS'
+      WHERE ts.Tipo IN (${placeholders})
         AND t.Estado IN ('Agendada', 'Pendiente', 'En camino')
         AND DATE(t.\`F.Soli\`) = CURDATE() 
         AND TIME(t.\`F.Soli\`) LIKE ? 
@@ -529,7 +521,7 @@ async function runQueueCron() {
     `;
     const searchPattern = `${tramoFiltro}%`;
 
-    const [rows] = await pool.query(queryStr, [searchPattern]);
+    const [rows] = await pool.query(queryStr, [...activeServices, searchPattern]);
     
     if (rows.length === 0) {
       return;
@@ -552,7 +544,7 @@ async function runQueueCron() {
       console.log(`[QUEUE] Orden ${row.OrdenId} procesada y eliminada de la cola.`);
     }
 
-    // 4. Procesamiento de Reprogramaciones (SOLO AVERIAS)
+    // 4. Procesamiento de Reprogramaciones activas
     const [reprogs] = await pool.query(`
       SELECT r.id as reprog_id, r.fecha_solicitada, r.turno, r.motivo as motivo_reprog, t.*, ts.Tipo as CategoriaServicioMantra
       FROM reprogramaciones r
@@ -560,12 +552,12 @@ async function runQueueCron() {
       INNER JOIN TipoServicio ts ON t.Producto = ts.Servicio
       LEFT JOIN LOG_NOTIFICACIONES_WSP l
         ON l.OrdenId = r.id AND l.EstadoNotificado = 'Reprogramacion' AND l.EnviadoExitosamente = 1
-      WHERE ts.Tipo = 'AVERIAS'
+      WHERE ts.Tipo IN (${placeholders})
         AND t.Estado IN ('Agendada', 'Pendiente', 'En camino')
         AND DATE(r.fecha_solicitada) >= CURDATE()
         AND l.id IS NULL
       LIMIT 20
-    `);
+    `, activeServices);
 
     if (reprogs.length > 0) {
       console.log(`[QUEUE] Procesando ${reprogs.length} reprogramacion(es) pendiente(s)...`);
@@ -600,14 +592,15 @@ async function runQueueCron() {
 module.exports = {
   pool,
   MAIN_TABLE,
-  MANTRA_CONFIG,
-  getDbConnection,
+  getControlTables,
+  resolveServiceType,
+  isSectorPiloto,
   ensureLogTableExists,
   sendMantraNotification,
   sendReprogramacionNotification,
   processOrderById,
   runQueueCron,
-  buildHomologatedCustomData,
+  buildDynamicCustomData,
   formatDateSpanish,
   formatTitleCase,
   formatRangoHorario
