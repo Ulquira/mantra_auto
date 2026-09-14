@@ -221,9 +221,14 @@ async function sendMantraNotification(orden) {
   const tipoServicio = 'Averias';
   const credentials = MANTRA_CONFIG[tipoServicio];
   const sectorOperativo = (orden['Sector Operativo'] || '').toUpperCase();
-  const isOeste2 = sectorOperativo.includes('OESTE 2') || sectorOperativo.includes('OESTE -2') || sectorOperativo.includes('OESTE-2');
-  const templateIdToUse = isOeste2 ? credentials.TEMPLATE_ID_OESTE2 : credentials.TEMPLATE_ID_DEFAULT;
-  const tagIdToUse = isOeste2 ? credentials.TAG_TRAKING_ID : null;
+  const isLimaOesteTracking = (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE 1')) ||
+                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE 2')) ||
+                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE -1')) ||
+                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE -2')) ||
+                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE-1')) ||
+                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE-2'));
+  const templateIdToUse = isLimaOesteTracking ? credentials.TEMPLATE_ID_OESTE2 : credentials.TEMPLATE_ID_DEFAULT;
+  const tagIdToUse = isLimaOesteTracking ? credentials.TAG_TRAKING_ID : null;
 
   const { firstName, fullName, phone, data: customData } = buildHomologatedCustomData(orden, {
     tagId: tagIdToUse,
@@ -232,7 +237,7 @@ async function sendMantraNotification(orden) {
 
   console.log(`\n=================================================`);
   console.log(`Procesando Orden: ${orden.OrdenId} - ${firstName} (${phone}) [Nombre completo: ${fullName}]`);
-  console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Sector: ${sectorOperativo || 'N/A'} | Template: ${templateIdToUse} | Etiquetas: BotEnvio (${credentials.TAG_BOT_ENVIO_ID})${isOeste2 ? ' + TRAKING (' + tagIdToUse + ')' : ''}`);
+  console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Sector: ${sectorOperativo || 'N/A'} | Template: ${templateIdToUse} | Etiquetas: BotEnvio (${credentials.TAG_BOT_ENVIO_ID})${isLimaOesteTracking ? ' + TRAKING (' + tagIdToUse + ')' : ''}`);
   console.log(`=================================================`);
 
   const contactPayload = {
@@ -314,8 +319,13 @@ async function sendReprogramacionNotification(reprog, orden) {
   }
 
   const sectorOperativo = (orden['Sector Operativo'] || '').toUpperCase();
-  const isOeste2 = sectorOperativo.includes('OESTE 2') || sectorOperativo.includes('OESTE -2') || sectorOperativo.includes('OESTE-2');
-  const tagIdToUse = isOeste2 ? credentials.TAG_TRAKING_ID : null;
+  const isLimaOesteTracking = (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE 1')) ||
+                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE 2')) ||
+                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE -1')) ||
+                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE -2')) ||
+                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE-1')) ||
+                              (sectorOperativo.includes('LIMA') && sectorOperativo.includes('OESTE-2'));
+  const tagIdToUse = isLimaOesteTracking ? credentials.TAG_TRAKING_ID : null;
 
   const fechaReprog = formatDateSpanish(reprog.fecha_solicitada);
   const rangoHorario = formatRangoHorario(reprog.turno || "08:00-12:00");
@@ -361,7 +371,7 @@ async function sendReprogramacionNotification(reprog, orden) {
 
   console.log(`\n=================================================`);
   console.log(`Procesando Reprogramación ID: ${reprog.id} | Orden: ${orden.OrdenId} - ${firstName} (${phone}) [Nombre completo: ${fullName}]`);
-  console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Template Asignado: ${credentials.TEMPLATE_REPROG_ID} | Etiquetas: BotEnvio (${credentials.TAG_BOT_ENVIO_ID})${isOeste2 ? ' + TRAKING' : ''}`);
+  console.log(`[Lógica Servicio] Tipo Resuelto: ${tipoServicio} | Template Asignado: ${credentials.TEMPLATE_REPROG_ID} | Etiquetas: BotEnvio (${credentials.TAG_BOT_ENVIO_ID})${isLimaOesteTracking ? ' + TRAKING' : ''}`);
   console.log(`=================================================`);
 
   const contactPayload = {
