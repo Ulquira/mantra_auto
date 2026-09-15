@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { pool, MANTRA_CONFIG } = require('./mantra_service.cjs');
+const { pool, getControlTables } = require('./mantra_service.cjs');
 
 const URL_TEMPLATE_REPORT = "https://wbpback2pro2.mantra.chat/report/template/messages/ext";
 
@@ -17,13 +17,15 @@ async function sleep(ms) {
 /**
  * Consulta y replica en MySQL todas las páginas de un reporte de plantilla de Mantra
  */
-async function syncTemplateReport(grupoKey, templateId, alias, fromDate, toDate) {
-  const config = MANTRA_CONFIG[grupoKey];
-  if (!config || !templateId) return { error: `Configuración no válida para ${grupoKey} - ${alias}` };
+async function syncTemplateReport(cfg, fromDate, toDate) {
+  const { api_key, group_id, template_id, nombre_alias, tipo_servicio } = cfg;
+  if (!api_key || !group_id || !template_id) {
+    return { error: `Configuración no válida para ${nombre_alias}` };
+  }
 
   console.log(`\n=================================================================================`);
-  console.log(`📥 Sincronizando Reporte: [${grupoKey}] ${alias}`);
-  console.log(`   Template ID: ${templateId} | Rango: ${fromDate} al ${toDate}`);
+  console.log(`📥 Sincronizando Reporte: [${tipo_servicio}] ${nombre_alias}`);
+  console.log(`   Template ID: ${template_id} | Rango: ${fromDate} al ${toDate}`);
   console.log(`=================================================================================`);
 
   let page = 1;
@@ -35,12 +37,12 @@ async function syncTemplateReport(grupoKey, templateId, alias, fromDate, toDate)
       const res = await fetch(URL_TEMPLATE_REPORT, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${config.API_KEY}`,
-          'GroupId': config.GROUP_ID,
+          'Authorization': `Bearer ${api_key}`,
+          'GroupId': group_id,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          templateId: templateId,
+          templateId: template_id,
           fromDate: fromDate,
           toDate: toDate,
           page: page,
@@ -98,9 +100,9 @@ async function syncTemplateReport(grupoKey, templateId, alias, fromDate, toDate)
           item.qrTxt || null,
           parseSqlTimestamp(item.qrAt),
           item.vendorId || item.contactFlowResponseId || null,
-          templateId,
-          grupoKey,
-          alias
+          template_id,
+          tipo_servicio,
+          nombre_alias
         ]);
 
         totalInserted++;
@@ -118,12 +120,12 @@ async function syncTemplateReport(grupoKey, templateId, alias, fromDate, toDate)
     }
   }
 
-  console.log(`✅ [${alias}] Finalizado: ${totalInserted} registros sincronizados en MySQL.`);
-  return { alias, totalInserted };
+  console.log(`✅ [${nombre_alias}] Finalizado: ${totalInserted} registros sincronizados en MySQL.`);
+  return { alias: nombre_alias, totalInserted };
 }
 
 /**
- * Sincroniza todas las plantillas de Averías e Instalaciones
+ * Sincroniza todas las plantillas activas de la tabla dinámica
  */
 async function syncAllTemplates(fromDate, toDate) {
   const hoy = new Date().toISOString().slice(0, 10);
@@ -135,52 +137,21 @@ async function syncAllTemplates(fromDate, toDate) {
   console.log(`📅 Rango de Fechas: ${from} al ${to}`);
   console.log(`=================================================================================`);
 
-  const templates = [
-    // --- AVERÍAS ---
-    {
-      grupo: "Averias",
-      templateId: MANTRA_CONFIG.Averias.TEMPLATE_ID_DEFAULT,
-      alias: "Averías - Default"
-    },
-    {
-      grupo: "Averias",
-      templateId: MANTRA_CONFIG.Averias.TEMPLATE_ID_OESTE2,
-      alias: "Averías - Sector Oeste 2"
-    },
-    {
-      grupo: "Averias",
-      templateId: MANTRA_CONFIG.Averias.TEMPLATE_REPROG_ID,
-      alias: "Averías - Reprogramación"
-    },
-    // --- INSTALACIONES ---
-    {
-      grupo: "Instalacion",
-      templateId: MANTRA_CONFIG.Instalacion.TEMPLATE_ID_DEFAULT,
-      alias: "Instalación - Default"
-    },
-    {
-      grupo: "Instalacion",
-      templateId: MANTRA_CONFIG.Instalacion.TEMPLATE_ID_OESTE2,
-      alias: "Instalación - Sector Oeste 2"
-    },
-    {
-      grupo: "Instalacion",
-      templateId: MANTRA_CONFIG.Instalacion.TEMPLATE_REPROG_ID,
-      alias: "Instalación - Reprogramación"
-    }
-  ];
+  const { configs } = await getControlTables(true);
+  const activeConfigs = (configs || []).filter(c => c.activo === 1 && c.api_key && c.template_id);
 
   const results = [];
-  for (const t of templates) {
-    const res = await syncTemplateReport(t.grupo, t.templateId, t.alias, from, to);
+  for (const cfg of activeConfigs) {
+    const res = await syncTemplateReport(cfg, from, to);
     results.push(res);
     await sleep(500);
   }
 
   console.log(`\n=================================================================================`);
-  console.log(`🏁 RESUMEN GENERAL DE SINCRONIZACIÓN:`);
+  console.log(`🏁 SINCRONIZACIÓN GENERAL FINALIZADA CON ÉXITO`);
   console.table(results);
   console.log(`=================================================================================`);
+  return results;
 }
 
 module.exports = {
