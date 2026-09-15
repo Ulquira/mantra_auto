@@ -1,6 +1,9 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
+const URL_CREATE_CONTACT = "https://wbpback2pro2.mantra.chat/contacts/new";
+const URL_SEND_TEMPLATE = "https://wbpback2pro2.mantra.chat/contacts/send";
+
 // Caché en memoria para reglas de tablas de control (TTL: 2 minutos)
 let cacheConfig = null;
 let cacheSectores = null;
