@@ -187,6 +187,7 @@ function buildDynamicCustomData(orden, cfg, overrides = {}) {
   const fechaVenta = fechaVentaRaw ? formatDateSpanish(fechaVentaRaw) : fecha;
   const depProvDist = [orden.Region, orden.Provincia, orden.Zona || orden.Localidad].filter(Boolean).join(' / ') || (orden.Localidad || 'LIMA');
   const canalVenta = orden.Empresa || orden['Sector Operativo'] || 'WIN';
+  const documento = orden['Número Documento'] || orden.NumeroDocumento || orden.num_doc || '';
 
   const valueMap = {
     'TICKET': ticket,
@@ -198,7 +199,8 @@ function buildDynamicCustomData(orden, cfg, overrides = {}) {
     'NOMBRE': firstName,
     'FECHA_VENTA': fechaVenta,
     'UBICACION': depProvDist,
-    'CANAL': canalVenta
+    'CANAL': canalVenta,
+    'DOCUMENTO': documento
   };
 
   function resolveVal(key, fallback = null) {
@@ -565,6 +567,7 @@ async function runQueueCron() {
         t.CodiSegui,
         t.ClienteFinal,
         t.TeleMovilNume,
+        t.\`Número Documento\`,
         t.IdenServi,
         t.Direccion,
         t.Region,
@@ -600,6 +603,7 @@ async function runQueueCron() {
         t.CodiSegui,
         t.ClienteFinal,
         t.TeleMovilNume,
+        t.\`Número Documento\`,
         t.IdenServi,
         t.Direccion,
         t.Region,
