@@ -2,7 +2,9 @@ const mysql = require('mysql2/promise');
 require('dotenv').config();
 
 const URL_CREATE_CONTACT = "https://wbpback2pro2.mantra.chat/contacts/new";
+const URL_CREATE_CONTACT_BY_USER = "https://wbpback2pro2.mantra.chat/contacts/newbyuser";
 const URL_SEND_TEMPLATE = "https://wbpback2pro2.mantra.chat/contacts/send";
+const AGENT_EMAIL_INSTALACION_LIMA = "jvieras@win.pe";
 
 // Caché en memoria para reglas de tablas de control (TTL: 2 minutos)
 let cacheConfig = null;
@@ -36,7 +38,7 @@ async function getControlTables(forceRefresh = false) {
 function resolveServiceType(orden) {
   const categoria = (orden.CategoriaServicioMantra || '').toUpperCase();
   if (categoria === 'AVERIAS' || categoria === 'POSTVENTA') return 'AVERIAS';
-  if (categoria === 'INSTALACION' || categoria === 'PROVINCIA') return 'INSTALACION';
+  if (categoria === 'INSTALACION') return 'INSTALACION';
   
   const tipoOrden = (orden.TipoOrden || '').toUpperCase();
   const producto = (orden.Producto || '').toUpperCase();
@@ -309,15 +311,22 @@ async function sendMantraNotification(orden) {
   console.log(`[Control Dinámico] Servicio: ${tipoServicio} | Sector: ${sectorOperativo || 'N/A'} | Plantilla: ${cfg.nombre_alias} (${cfg.template_id}) | Piloto: ${enPiloto ? 'SI' : 'NO'}`);
   console.log(`=================================================`);
 
+  const isInstalacionLima = tipoServicio === 'INSTALACION';
+  const targetUrlContact = isInstalacionLima ? URL_CREATE_CONTACT_BY_USER : URL_CREATE_CONTACT;
+
   const contactPayload = {
     groupId: cfg.group_id,
     apiKey: cfg.api_key,
     data: customData
   };
 
+  if (isInstalacionLima) {
+    contactPayload.userEmail = AGENT_EMAIL_INSTALACION_LIMA;
+  }
+
   try {
-    console.log("1. Enviando petición para crear/actualizar contacto con variables dinámicas...");
-    const resContact = await fetch(URL_CREATE_CONTACT, {
+    console.log(`1. Enviando petición para crear/actualizar contacto con variables dinámicas...${isInstalacionLima ? ` (Asignando a ${AGENT_EMAIL_INSTALACION_LIMA})` : ''}`);
+    const resContact = await fetch(targetUrlContact, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(contactPayload)
@@ -395,15 +404,22 @@ async function sendReprogramacionNotification(reprog, orden) {
   console.log(`[Control Dinámico] Servicio: ${tipoServicio} | Plantilla: ${cfg.nombre_alias} (${cfg.template_id})`);
   console.log(`=================================================`);
 
+  const isInstalacionLima = tipoServicio === 'INSTALACION';
+  const targetUrlContact = isInstalacionLima ? URL_CREATE_CONTACT_BY_USER : URL_CREATE_CONTACT;
+
   const contactPayload = {
     groupId: cfg.group_id,
     apiKey: cfg.api_key,
     data: customData
   };
 
+  if (isInstalacionLima) {
+    contactPayload.userEmail = AGENT_EMAIL_INSTALACION_LIMA;
+  }
+
   try {
-    console.log("1. Enviando petición para crear/actualizar contacto (Reprogramación)...");
-    const resContact = await fetch(URL_CREATE_CONTACT, {
+    console.log(`1. Enviando petición para crear/actualizar contacto (Reprogramación)...${isInstalacionLima ? ` (Asignando a ${AGENT_EMAIL_INSTALACION_LIMA})` : ''}`);
+    const resContact = await fetch(targetUrlContact, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(contactPayload)
@@ -502,12 +518,7 @@ async function runQueueCron() {
     const { configs } = await getControlTables();
     
     // Obtener los servicios que están activos en CONFIG_PLANTILLAS_MANTRA
-    let activeServices = [...new Set(configs.filter(c => c.activo === 1).map(c => c.tipo_servicio))];
-    
-    // Si INSTALACION está activo, incluir también PROVINCIA (que mapea a instalaciones de provincia)
-    if (activeServices.includes('INSTALACION') && !activeServices.includes('PROVINCIA')) {
-      activeServices.push('PROVINCIA');
-    }
+    const activeServices = [...new Set(configs.filter(c => c.activo === 1).map(c => c.tipo_servicio))];
     
     if (activeServices.length === 0) {
       console.log('[QUEUE] Todos los servicios están en activo = 0 en CONFIG_PLANTILLAS_MANTRA. Omitiendo.');
