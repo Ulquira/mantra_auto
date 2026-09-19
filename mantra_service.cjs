@@ -502,7 +502,12 @@ async function runQueueCron() {
     const { configs } = await getControlTables();
     
     // Obtener los servicios que están activos en CONFIG_PLANTILLAS_MANTRA
-    const activeServices = [...new Set(configs.filter(c => c.activo === 1).map(c => c.tipo_servicio))];
+    let activeServices = [...new Set(configs.filter(c => c.activo === 1).map(c => c.tipo_servicio))];
+    
+    // Si INSTALACION está activo, incluir también PROVINCIA (que mapea a instalaciones de provincia)
+    if (activeServices.includes('INSTALACION') && !activeServices.includes('PROVINCIA')) {
+      activeServices.push('PROVINCIA');
+    }
     
     if (activeServices.length === 0) {
       console.log('[QUEUE] Todos los servicios están en activo = 0 en CONFIG_PLANTILLAS_MANTRA. Omitiendo.');
@@ -541,9 +546,30 @@ async function runQueueCron() {
     `, activeServices);
 
     // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola, sean de HOY, correspondan al tramo y pertenezcan a servicios activos
-    // IMPORTANTE: GROUP BY t.OrdenId para evitar duplicados si un mismo OrdenId ingresó más de una vez a la cola
     const queryStr = `
-      SELECT t.*, DATE(t.\`F.Soli\`) as f_date, TIME(t.\`F.Soli\`) as f_time, MIN(c.id) as colaId, ts.Tipo as CategoriaServicioMantra
+      SELECT 
+        t.OrdenId,
+        t.Producto,
+        t.Estado,
+        t.CodiSegui,
+        t.ClienteFinal,
+        t.TeleMovilNume,
+        t.IdenServi,
+        t.Direccion,
+        t.Region,
+        t.Zona,
+        t.Provincia,
+        t.Localidad,
+        t.Empresa,
+        t.\`Sector Operativo\`,
+        t.\`F.Soli\`,
+        t.\`F.Visita\`,
+        t.FechaUltiEsta,
+        t.token,
+        DATE(t.\`F.Soli\`) as f_date,
+        TIME(t.\`F.Soli\`) as f_time,
+        MIN(c.id) as colaId,
+        MAX(ts.Tipo) as CategoriaServicioMantra
       FROM COLA_NOTIFICACIONES_MANTRA c
       INNER JOIN ${MAIN_TABLE} t ON c.ordenId = t.OrdenId
       INNER JOIN TipoServicio ts ON t.Producto = ts.Servicio
@@ -556,7 +582,25 @@ async function runQueueCron() {
         AND DATE(t.\`F.Soli\`) = CURDATE() 
         AND TIME(t.\`F.Soli\`) LIKE ? 
         AND l.id IS NULL
-      GROUP BY t.OrdenId
+      GROUP BY 
+        t.OrdenId,
+        t.Producto,
+        t.Estado,
+        t.CodiSegui,
+        t.ClienteFinal,
+        t.TeleMovilNume,
+        t.IdenServi,
+        t.Direccion,
+        t.Region,
+        t.Zona,
+        t.Provincia,
+        t.Localidad,
+        t.Empresa,
+        t.\`Sector Operativo\`,
+        t.\`F.Soli\`,
+        t.\`F.Visita\`,
+        t.FechaUltiEsta,
+        t.token
       ORDER BY colaId ASC LIMIT 50
     `;
     const searchPattern = `${tramoFiltro}%`;
