@@ -68,13 +68,35 @@ function extractPlanName(idenServi) {
     paquete = idenServi.split('|')[0].trim();
   }
 
+  // Extraer cantidad de Mesh
+  let cantidadMesh = 0;
+  const matchMeshCount = idenServi.match(/Cantidad de Mesh\s*:\s*(\d+)/i);
+  if (matchMeshCount && matchMeshCount[1]) {
+    cantidadMesh = parseInt(matchMeshCount[1], 10) || 0;
+  }
+
   let svas = "";
   const matchSva = idenServi.match(/SVA['’]?s\s*:\s*([^|]+)/i);
   if (matchSva && matchSva[1]) {
-    const rawSva = matchSva[1].trim();
+    let rawSva = matchSva[1].trim();
     if (rawSva && !rawSva.toUpperCase().includes("SIN SVA")) {
-      svas = rawSva;
+      // Limpiar "(EN COMODATO)", "(EN ALQUILER)", "EN COMODATO", "EN ALQUILER"
+      rawSva = rawSva.replace(/\s*\(\s*EN\s+(?:COMODATO|ALQUILER)\s*\)/gi, '');
+      rawSva = rawSva.replace(/\s+EN\s+(?:COMODATO|ALQUILER)/gi, '');
+
+      // Si tiene MESH en el SVA pero la cantidad es > 0, normalizarlo con la cantidad
+      if (/MESH/i.test(rawSva)) {
+        if (cantidadMesh > 0) {
+          rawSva = rawSva.replace(/\bMESH\b/gi, `${cantidadMesh} MESH`);
+        }
+      }
+      svas = rawSva.trim();
     }
+  }
+
+  // Si no estaba en SVA pero tiene cantidad de Mesh > 0
+  if (cantidadMesh > 0 && !/MESH/i.test(svas)) {
+    svas = svas ? `${svas} + ${cantidadMesh} MESH` : `${cantidadMesh} MESH`;
   }
 
   if (paquete && svas) {
