@@ -58,13 +58,29 @@ function isSectorPiloto(tipoServicio, sectorOperativo, sectoresList) {
 }
 
 function extractPlanName(idenServi) {
-  if (!idenServi) return "tu plan Win";
-  const match = idenServi.match(/Paquete\s*:\s*([^|]+)/i);
-  if (match && match[1]) {
-    const plan = match[1].trim();
-    if (plan) return plan;
+  if (!idenServi || typeof idenServi !== 'string') return "tu plan Win";
+  
+  let paquete = "";
+  const matchPaquete = idenServi.match(/Paquete\s*:\s*([^|]+)/i);
+  if (matchPaquete && matchPaquete[1]) {
+    paquete = matchPaquete[1].trim();
+  } else {
+    paquete = idenServi.split('|')[0].trim();
   }
-  return idenServi.split('|')[0].trim() || "tu plan Win";
+
+  let svas = "";
+  const matchSva = idenServi.match(/SVA['’]?s\s*:\s*([^|]+)/i);
+  if (matchSva && matchSva[1]) {
+    const rawSva = matchSva[1].trim();
+    if (rawSva && !rawSva.toUpperCase().includes("SIN SVA")) {
+      svas = rawSva;
+    }
+  }
+
+  if (paquete && svas) {
+    return `${paquete} + ${svas}`;
+  }
+  return paquete || "tu plan Win";
 }
 
 function extractFirstName(fullName) {
@@ -95,9 +111,8 @@ function formatDateSpanish(rawDate) {
   const diaSemana = dias[dateObj.getUTCDay()];
   const diaMes = dateObj.getUTCDate();
   const mes = meses[dateObj.getUTCMonth()];
-  const anio = dateObj.getUTCFullYear();
   
-  return `${diaSemana} ${diaMes} de ${mes} ${anio}`;
+  return `${diaSemana} ${diaMes} de ${mes}`;
 }
 
 function formatTitleCase(str) {
