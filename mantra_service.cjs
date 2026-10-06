@@ -154,11 +154,30 @@ function formatTitleCase(str) {
 
 function formatRangoHorario(rawTime) {
   if (!rawTime) return "08:00-12:00";
-  const t = String(rawTime).trim();
-  if (t.includes('08:') || t.includes('08:00') || t.includes('8AM')) return "08:00-12:00";
-  if (t.includes('12:') || t.includes('12:00') || t.includes('12PM') || t.includes('12pm')) return "12:00-16:00";
-  if (t.includes('16:') || t.includes('16:00') || t.includes('4PM') || t.includes('4pm')) return "16:00-20:00";
-  return t;
+  const str = String(rawTime).trim().toLowerCase();
+
+  // 1. Si ya viene formateado
+  if (str.includes('08:00') && str.includes('12:00')) return "08:00-12:00";
+  if (str.includes('12:00') && str.includes('16:00')) return "12:00-16:00";
+  if (str.includes('16:00') && str.includes('20:00')) return "16:00-20:00";
+
+  // 2. Detección por inicio de rango (cubre "8am - 12pm", "12pm - 4pm", "4pm - 8pm", "08:00:00", etc.)
+  if (str.startsWith('8') || str.startsWith('08') || str.startsWith('09')) {
+    return "08:00-12:00";
+  }
+  if (str.startsWith('12') || str.startsWith('13') || str.startsWith('14') || str.startsWith('15')) {
+    return "12:00-16:00";
+  }
+  if (str.startsWith('4') || str.startsWith('16') || str.startsWith('17') || str.startsWith('18')) {
+    return "16:00-20:00";
+  }
+
+  // 3. Fallback por contenido
+  if (str.includes('8am')) return "08:00-12:00";
+  if (str.includes('12pm')) return "12:00-16:00";
+  if (str.includes('4pm')) return "16:00-20:00";
+
+  return "08:00-12:00";
 }
 
 function buildDynamicCustomData(orden, cfg, overrides = {}) {
