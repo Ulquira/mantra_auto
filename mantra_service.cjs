@@ -35,10 +35,14 @@ async function getControlTables(forceRefresh = false) {
   }
 }
 
-function resolveServiceType(orden) {
+function resolveServiceType(orden, activeServices = []) {
   const categoria = (orden.CategoriaServicioMantra || '').toUpperCase();
+  if (categoria && activeServices.length > 0 && activeServices.includes(categoria)) {
+    return categoria;
+  }
   if (categoria === 'AVERIAS' || categoria === 'POSTVENTA') return 'AVERIAS';
   if (categoria === 'INSTALACION') return 'INSTALACION';
+  if (categoria) return categoria;
   
   const tipoOrden = (orden.TipoOrden || '').toUpperCase();
   const producto = (orden.Producto || '').toUpperCase();
@@ -296,7 +300,8 @@ async function ensureLogTableExists(dbOrPool) {
 
 async function sendMantraNotification(orden) {
   const { configs, sectores } = await getControlTables();
-  const tipoServicio = resolveServiceType(orden);
+  const activeServices = [...new Set((configs || []).filter(c => c.activo === 1).map(c => c.tipo_servicio))];
+  const tipoServicio = resolveServiceType(orden, activeServices);
   const sectorOperativo = (orden['Sector Operativo'] || '').toUpperCase();
 
   // 1. Determinar si va a la plantilla TRACKING o DEFAULT según SECTORES_PILOTO_TRACKING
@@ -388,7 +393,8 @@ async function sendMantraNotification(orden) {
 
 async function sendReprogramacionNotification(reprog, orden) {
   const { configs } = await getControlTables();
-  const tipoServicio = resolveServiceType(orden);
+  const activeServices = [...new Set((configs || []).filter(c => c.activo === 1).map(c => c.tipo_servicio))];
+  const tipoServicio = resolveServiceType(orden, activeServices);
 
   // Buscar configuración de REPROGRAMACION en CONFIG_PLANTILLAS_MANTRA
   const cfg = configs.find(c => c.tipo_servicio === tipoServicio && c.tipo_plantilla === 'REPROGRAMACION');
