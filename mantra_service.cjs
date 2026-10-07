@@ -5,6 +5,7 @@ const URL_CREATE_CONTACT = "https://wbpback2pro2.mantra.chat/contacts/new";
 const URL_CREATE_CONTACT_BY_USER = "https://wbpback2pro2.mantra.chat/contacts/newbyuser";
 const URL_SEND_TEMPLATE = "https://wbpback2pro2.mantra.chat/contacts/send";
 const AGENT_EMAIL_INSTALACION_LIMA = "jvieras@win.pe";
+const AGENT_EMAIL_INSTALACION_PROVINCIA = "oolivares@win.pe";
 
 // Caché en memoria para reglas de tablas de control (TTL: 2 minutos)
 let cacheConfig = null;
@@ -35,19 +36,19 @@ async function getControlTables(forceRefresh = false) {
   }
 }
 
-function resolveServiceType(orden, activeServices = []) {
+function resolveServiceType(orden) {
   const categoria = (orden.CategoriaServicioMantra || '').toUpperCase();
-  if (categoria && activeServices.length > 0 && activeServices.includes(categoria)) {
-    return categoria;
-  }
   if (categoria === 'AVERIAS' || categoria === 'POSTVENTA') return 'AVERIAS';
+  if (categoria === 'PROVINCIA') return 'PROVINCIA';
   if (categoria === 'INSTALACION') return 'INSTALACION';
-  if (categoria) return categoria;
   
   const tipoOrden = (orden.TipoOrden || '').toUpperCase();
   const producto = (orden.Producto || '').toUpperCase();
   if (tipoOrden.includes('AVERIA') || tipoOrden.includes('VISITA') || producto.includes('AVERIA')) {
     return 'AVERIAS';
+  }
+  if (producto.includes('PROV')) {
+    return 'PROVINCIA';
   }
   return 'INSTALACION';
 }
@@ -300,8 +301,7 @@ async function ensureLogTableExists(dbOrPool) {
 
 async function sendMantraNotification(orden) {
   const { configs, sectores } = await getControlTables();
-  const activeServices = [...new Set((configs || []).filter(c => c.activo === 1).map(c => c.tipo_servicio))];
-  const tipoServicio = resolveServiceType(orden, activeServices);
+  const tipoServicio = resolveServiceType(orden);
   const sectorOperativo = (orden['Sector Operativo'] || '').toUpperCase();
 
   // 1. Determinar si va a la plantilla TRACKING o DEFAULT según SECTORES_PILOTO_TRACKING
@@ -338,7 +338,9 @@ async function sendMantraNotification(orden) {
   console.log(`=================================================`);
 
   const isInstalacionLima = tipoServicio === 'INSTALACION';
-  const targetUrlContact = isInstalacionLima ? URL_CREATE_CONTACT_BY_USER : URL_CREATE_CONTACT;
+  const isInstalacionProvincia = tipoServicio === 'PROVINCIA';
+  const requiresAgentAssignment = isInstalacionLima || isInstalacionProvincia;
+  const targetUrlContact = requiresAgentAssignment ? URL_CREATE_CONTACT_BY_USER : URL_CREATE_CONTACT;
 
   const contactPayload = {
     groupId: cfg.group_id,
@@ -348,10 +350,15 @@ async function sendMantraNotification(orden) {
 
   if (isInstalacionLima) {
     contactPayload.userEmail = AGENT_EMAIL_INSTALACION_LIMA;
+  } else if (isInstalacionProvincia) {
+    contactPayload.userEmail = AGENT_EMAIL_INSTALACION_PROVINCIA;
   }
 
   try {
-    console.log(`1. Enviando petición para crear/actualizar contacto con variables dinámicas...${isInstalacionLima ? ` (Asignando a ${AGENT_EMAIL_INSTALACION_LIMA})` : ''}`);
+    const assignedAgentLog = isInstalacionLima 
+      ? ` (Asignando a ${AGENT_EMAIL_INSTALACION_LIMA})` 
+      : (isInstalacionProvincia ? ` (Asignando a ${AGENT_EMAIL_INSTALACION_PROVINCIA})` : '');
+    console.log(`1. Enviando petición para crear/actualizar contacto con variables dinámicas...${assignedAgentLog}`);
     const resContact = await fetch(targetUrlContact, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -393,8 +400,7 @@ async function sendMantraNotification(orden) {
 
 async function sendReprogramacionNotification(reprog, orden) {
   const { configs } = await getControlTables();
-  const activeServices = [...new Set((configs || []).filter(c => c.activo === 1).map(c => c.tipo_servicio))];
-  const tipoServicio = resolveServiceType(orden, activeServices);
+  const tipoServicio = resolveServiceType(orden);
 
   // Buscar configuración de REPROGRAMACION en CONFIG_PLANTILLAS_MANTRA
   const cfg = configs.find(c => c.tipo_servicio === tipoServicio && c.tipo_plantilla === 'REPROGRAMACION');
@@ -432,7 +438,9 @@ async function sendReprogramacionNotification(reprog, orden) {
   console.log(`=================================================`);
 
   const isInstalacionLima = tipoServicio === 'INSTALACION';
-  const targetUrlContact = isInstalacionLima ? URL_CREATE_CONTACT_BY_USER : URL_CREATE_CONTACT;
+  const isInstalacionProvincia = tipoServicio === 'PROVINCIA';
+  const requiresAgentAssignment = isInstalacionLima || isInstalacionProvincia;
+  const targetUrlContact = requiresAgentAssignment ? URL_CREATE_CONTACT_BY_USER : URL_CREATE_CONTACT;
 
   const contactPayload = {
     groupId: cfg.group_id,
@@ -442,10 +450,15 @@ async function sendReprogramacionNotification(reprog, orden) {
 
   if (isInstalacionLima) {
     contactPayload.userEmail = AGENT_EMAIL_INSTALACION_LIMA;
+  } else if (isInstalacionProvincia) {
+    contactPayload.userEmail = AGENT_EMAIL_INSTALACION_PROVINCIA;
   }
 
   try {
-    console.log(`1. Enviando petición para crear/actualizar contacto (Reprogramación)...${isInstalacionLima ? ` (Asignando a ${AGENT_EMAIL_INSTALACION_LIMA})` : ''}`);
+    const assignedAgentLog = isInstalacionLima 
+      ? ` (Asignando a ${AGENT_EMAIL_INSTALACION_LIMA})` 
+      : (isInstalacionProvincia ? ` (Asignando a ${AGENT_EMAIL_INSTALACION_PROVINCIA})` : '');
+    console.log(`1. Enviando petición para crear/actualizar contacto (Reprogramación)...${assignedAgentLog}`);
     const resContact = await fetch(targetUrlContact, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
