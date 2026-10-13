@@ -213,6 +213,7 @@ function buildDynamicCustomData(orden, cfg, overrides = {}) {
   const canalVenta = orden.Empresa || orden['Sector Operativo'] || 'WIN';
   const documento = orden['Número Documento'] || orden.NumeroDocumento || orden.num_doc || '';
   const pin = orden.Pin_token ? String(orden.Pin_token).trim() : (orden.pin_token ? String(orden.pin_token).trim() : (orden.PIN ? String(orden.PIN).trim() : ''));
+  const rawToken = orden.token ? String(orden.token).trim() : '';
 
   const valueMap = {
     'TICKET': ticket,
@@ -227,7 +228,8 @@ function buildDynamicCustomData(orden, cfg, overrides = {}) {
     'CANAL': canalVenta,
     'DOCUMENTO': documento,
     'PIN': pin,
-    'PIN_TOKEN': pin
+    'PIN_TOKEN': pin,
+    'TOKEN': rawToken
   };
 
   function resolveVal(key, fallback = null) {
