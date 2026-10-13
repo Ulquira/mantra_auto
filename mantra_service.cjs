@@ -212,6 +212,7 @@ function buildDynamicCustomData(orden, cfg, overrides = {}) {
   const depProvDist = [orden.Region, orden.Provincia, orden.Zona || orden.Localidad].filter(Boolean).join(' / ') || (orden.Localidad || 'LIMA');
   const canalVenta = orden.Empresa || orden['Sector Operativo'] || 'WIN';
   const documento = orden['Número Documento'] || orden.NumeroDocumento || orden.num_doc || '';
+  const pin = orden.Pin_token ? String(orden.Pin_token).trim() : (orden.pin_token ? String(orden.pin_token).trim() : (orden.PIN ? String(orden.PIN).trim() : ''));
 
   const valueMap = {
     'TICKET': ticket,
@@ -224,7 +225,9 @@ function buildDynamicCustomData(orden, cfg, overrides = {}) {
     'FECHA_VENTA': fechaVenta,
     'UBICACION': depProvDist,
     'CANAL': canalVenta,
-    'DOCUMENTO': documento
+    'DOCUMENTO': documento,
+    'PIN': pin,
+    'PIN_TOKEN': pin
   };
 
   function resolveVal(key, fallback = null) {
@@ -246,6 +249,13 @@ function buildDynamicCustomData(orden, cfg, overrides = {}) {
     custom_7: resolveVal(cfg.custom_7_campo, firstName),
     custom_10: resolveVal(cfg.custom_10_campo, trackingLink)
   };
+
+  if (cfg.custom_8_campo) {
+    data.custom_8 = resolveVal(cfg.custom_8_campo, null);
+  }
+  if (cfg.custom_9_campo) {
+    data.custom_9 = resolveVal(cfg.custom_9_campo, null);
+  }
 
   // Manejo de etiquetas: siempre agregar BotEnvio + TRAKING si corresponde
   const tagList = [];
@@ -618,6 +628,7 @@ async function runQueueCron() {
         t.\`F.Visita\`,
         t.FechaUltiEsta,
         t.token,
+        t.Pin_token,
         DATE(t.\`F.Soli\`) as f_date,
         TIME(t.\`F.Soli\`) as f_time,
         MIN(c.id) as colaId,
@@ -653,7 +664,8 @@ async function runQueueCron() {
         t.\`F.Soli\`,
         t.\`F.Visita\`,
         t.FechaUltiEsta,
-        t.token
+        t.token,
+        t.Pin_token
       ORDER BY colaId ASC LIMIT 50
     `;
     const searchPattern = `${tramoFiltro}%`;
