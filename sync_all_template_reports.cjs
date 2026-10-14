@@ -162,8 +162,12 @@ module.exports = {
 // Si se ejecuta directamente desde la terminal
 if (require.main === module) {
   const args = process.argv.slice(2);
-  const fromDate = args[0] || new Date().toISOString().slice(0, 10);
-  const toDate = args[1] || fromDate;
+  const d = new Date();
+  d.setDate(d.getDate() - 2);
+  const defaultFrom = d.toISOString().slice(0, 10);
+  const hoy = new Date().toISOString().slice(0, 10);
+  const fromDate = args[0] || defaultFrom;
+  const toDate = args[1] || hoy;
 
   syncAllTemplates(fromDate, toDate).then(async () => {
     // Mostrar vista de los primeros 10 registros replicados

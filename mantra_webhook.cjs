@@ -23,11 +23,11 @@ cron.schedule('0 8-18/2 * * *', async () => {
   console.log(`⏰ [Reporte Mantra] Iniciando sincronización periódica de reportes de plantillas de Mantra...`);
   try {
     const hoy = new Date().toISOString().slice(0, 10);
-    // Sincronizar el día anterior y el día de hoy para consolidar métricas finales
+    // Sincronizar los últimos 2 días y el día de hoy para consolidar métricas y absorber desfases horarios
     const d = new Date();
-    d.setDate(d.getDate() - 1);
-    const ayer = d.toISOString().slice(0, 10);
-    await syncAllTemplates(ayer, hoy);
+    d.setDate(d.getDate() - 2);
+    const haceDosDias = d.toISOString().slice(0, 10);
+    await syncAllTemplates(haceDosDias, hoy);
     console.log(`✅ [Reporte Mantra] Sincronización periódica de reportes completada.`);
   } catch (err) {
     console.error(`❌ Error en cron periódico de reportes:`, err.message);
