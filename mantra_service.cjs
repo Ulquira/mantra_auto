@@ -204,7 +204,7 @@ function buildDynamicCustomData(orden, cfg, overrides = {}) {
 
   const rawDireccion = orden.Direccion ? orden.Direccion.split('||')[0].trim() : "";
   const direccion = formatTitleCase(rawDireccion);
-  const trackingLink = orden.token ? `https://go.win.pe/seguimiento/${orden.token}` : (orden.link || '');
+  const trackingLink = orden.token ? `https://enruta.win.pe/seguimiento/${orden.token}` : (orden.link || '');
   const plan = extractPlanName(orden.IdenServi) || orden.Producto || "tu plan Win";
   
   const fechaVentaRaw = orden.FechaUltiEsta || orden.f_visita || orden.FechaIniVisi;
@@ -582,13 +582,18 @@ async function runQueueCron() {
     const formatter = new Intl.DateTimeFormat([], options);
     const horaActual = parseInt(formatter.format(new Date()), 10);
 
-    // 2. Determinar el tramo objetivo basado en la hora actual
+    // 2. Determinar el tramo objetivo basado en la hora actual (para AVERIAS y PROVINCIA)
     let tramoFiltro = null;
     if (horaActual >= 7 && horaActual <= 9) tramoFiltro = '08';
     else if (horaActual >= 11 && horaActual <= 13) tramoFiltro = '12';
     else if (horaActual >= 15 && horaActual <= 17) tramoFiltro = '16';
 
-    if (!tramoFiltro) {
+    // Regla de horario para INSTALACION: de 7:00 AM a 7:00 PM (hora 7 a 18 inclusive) sin restricción de tramos
+    const isHorarioInstalacion = horaActual >= 7 && horaActual < 19;
+    const isInstalacionActivo = activeServices.includes('INSTALACION');
+
+    // Si no estamos en ventana de tramo (AVERIAS/PROVINCIA) ni en horario activo de INSTALACION, omitir ciclo
+    if (!tramoFiltro && (!isHorarioInstalacion || !isInstalacionActivo)) {
       return;
     }
 
@@ -608,7 +613,9 @@ async function runQueueCron() {
          OR l.id IS NOT NULL
     `, activeServices);
 
-    // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola, sean de HOY, correspondan al tramo y pertenezcan a servicios activos
+    // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola, sean de HOY y pertenezcan a servicios activos:
+    // - INSTALACION: Sin restricción de tramo horario (se despacha de 7 a 7 inmediatamente)
+    // - AVERIAS y PROVINCIA: Sujetos a sus ventanas horarias normales (tramos 08, 12, 16)
     const queryStr = `
       SELECT 
         t.OrdenId,
@@ -645,7 +652,11 @@ async function runQueueCron() {
       WHERE ts.Tipo IN (${placeholders})
         AND t.Estado IN ('Agendada', 'Pendiente', 'En camino')
         AND DATE(t.\`F.Soli\`) = CURDATE() 
-        AND TIME(t.\`F.Soli\`) LIKE ? 
+        AND (
+          (ts.Tipo = 'INSTALACION' AND ? = 1)
+          OR
+          (ts.Tipo <> 'INSTALACION' AND ? IS NOT NULL AND TIME(t.\`F.Soli\`) LIKE ?)
+        )
         AND l.id IS NULL
       GROUP BY 
         t.OrdenId,
@@ -670,15 +681,22 @@ async function runQueueCron() {
         t.Pin_token
       ORDER BY colaId ASC LIMIT 50
     `;
-    const searchPattern = `${tramoFiltro}%`;
+    const searchPattern = tramoFiltro ? `${tramoFiltro}%` : null;
+    const queryParams = [
+      ...activeServices,
+      isHorarioInstalacion && isInstalacionActivo ? 1 : 0,
+      searchPattern,
+      searchPattern
+    ];
 
-    const [rows] = await pool.query(queryStr, [...activeServices, searchPattern]);
+    const [rows] = await pool.query(queryStr, queryParams);
     
     if (rows.length === 0) {
       return;
     }
 
-    console.log(`[QUEUE] Evaluando Tramo Horario [${tramoFiltro}:00]. Procesando ${rows.length} órdenes únicas en cola desde ${MAIN_TABLE}.`);
+    const tramoLog = tramoFiltro ? `Tramo [${tramoFiltro}:00] activo` : 'Fuera de ventana (Solo Instalaciones)';
+    console.log(`[QUEUE] ${tramoLog}. Procesando ${rows.length} órdenes únicas en cola desde ${MAIN_TABLE}.`);
 
     for (const row of rows) {
       const result = await sendMantraNotification(row);
