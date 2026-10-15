@@ -88,15 +88,19 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
       console.log(`   Página ${page}/${json.totalPages || 1}: Procesando ${rows.length} registros (Total general Mantra: ${json.total})...`);
 
       for (const item of rows) {
+        const itemToken = (item.custom_9 && String(item.custom_9).trim().length >= 20) 
+          ? String(item.custom_9).trim() 
+          : (item.custom_10 && String(item.custom_10).includes('/seguimiento/') ? String(item.custom_10).split('/seguimiento/').pop().trim() : null);
+
         await pool.query(`
           INSERT INTO REPORTE_PLANTILLAS_MANTRA (
             contacto_id, nombre, telefono, email,
             agente_asignado, enviado_por,
-            codigo_pedido,
+            codigo_pedido, token,
             creado, fecha_envio, estado_mensaje, estado_chat,
             respuesta_boton, fecha_respuesta_boton, vendor_id,
             template_id, grupo_servicio, nombre_plantilla_alias
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON DUPLICATE KEY UPDATE
             nombre = VALUES(nombre),
             telefono = VALUES(telefono),
@@ -104,6 +108,7 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
             agente_asignado = VALUES(agente_asignado),
             enviado_por = VALUES(enviado_por),
             codigo_pedido = VALUES(codigo_pedido),
+            token = COALESCE(VALUES(token), token),
             creado = VALUES(creado),
             fecha_envio = VALUES(fecha_envio),
             estado_mensaje = VALUES(estado_mensaje),
@@ -121,6 +126,7 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
           item.agentName || null,
           item.sentBy || null,
           resolveCodigoPedido(item, cfg),
+          itemToken,
           parseSqlTimestamp(item.createdAt),
           parseSqlTimestamp(item.msgSentAt),
           item.msgStatus || null,
