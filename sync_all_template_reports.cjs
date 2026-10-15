@@ -14,6 +14,34 @@ async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function resolveCodigoPedido(item, cfg) {
+  // 1. Buscar en las columnas configuradas si alguna es TICKET o DOCUMENTO
+  for (let i = 1; i <= 10; i++) {
+    const colName = `custom_${i}_campo`;
+    if (cfg && (cfg[colName] === 'TICKET' || cfg[colName] === 'DOCUMENTO')) {
+      const val = item[`custom_${i}`];
+      if (val && typeof val === 'string' && val.trim() !== '' && !val.startsWith('http')) {
+        return val.trim();
+      }
+    }
+  }
+
+  // 2. Si custom_10 o custom_6 es ticket / documento y no es link ni plan
+  if (item.custom_10 && !String(item.custom_10).startsWith('http') && !/^(internet|paquete)/i.test(item.custom_10)) {
+    return String(item.custom_10).trim();
+  }
+  if (item.custom_6 && !String(item.custom_6).startsWith('http') && !/^(internet|paquete)/i.test(item.custom_6)) {
+    return String(item.custom_6).trim();
+  }
+
+  // 3. Si custom_1 no es plan ni fecha, usar custom_1
+  if (item.custom_1 && !/^(internet|paquete|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)/i.test(item.custom_1)) {
+    return String(item.custom_1).trim();
+  }
+
+  return item.custom_1 ? String(item.custom_1).trim() : (item.contactId || null);
+}
+
 /**
  * Consulta y replica en MySQL todas las páginas de un reporte de plantilla de Mantra
  */
@@ -92,7 +120,7 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
           item.email || null,
           item.agentName || null,
           item.sentBy || null,
-          item.custom_1 || null, // custom_1: Código de Pedido / Ticket
+          resolveCodigoPedido(item, cfg),
           parseSqlTimestamp(item.createdAt),
           parseSqlTimestamp(item.msgSentAt),
           item.msgStatus || null,
