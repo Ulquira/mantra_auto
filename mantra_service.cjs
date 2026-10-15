@@ -37,13 +37,20 @@ async function getControlTables(forceRefresh = false) {
 }
 
 function resolveServiceType(orden) {
-  const categoria = (orden.CategoriaServicioMantra || '').toUpperCase();
+  const categoria = (orden.CategoriaServicioMantra || '').toUpperCase().trim();
+  if (categoria === 'AVERIAS PRV') return 'AVERIAS PRV';
   if (categoria === 'AVERIAS' || categoria === 'POSTVENTA') return 'AVERIAS';
   if (categoria === 'PROVINCIA') return 'PROVINCIA';
   if (categoria === 'INSTALACION') return 'INSTALACION';
   
-  const tipoOrden = (orden.TipoOrden || '').toUpperCase();
-  const producto = (orden.Producto || '').toUpperCase();
+  const tipoOrden = (orden.TipoOrden || '').toUpperCase().trim();
+  const producto = (orden.Producto || '').toUpperCase().trim();
+  
+  // Si es Averías Provincia explícito
+  if (producto === 'AVERIAS PROVINCIA' || (producto.includes('AVERIA') && producto.includes('PROV'))) {
+    return 'AVERIAS PRV';
+  }
+  
   if (tipoOrden.includes('AVERIA') || tipoOrden.includes('VISITA') || producto.includes('AVERIA')) {
     return 'AVERIAS';
   }
