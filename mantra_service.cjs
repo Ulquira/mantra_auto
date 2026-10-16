@@ -36,12 +36,16 @@ async function getControlTables(forceRefresh = false) {
   }
 }
 
-function resolveServiceType(orden) {
+function resolveServiceType(orden, activeServices = []) {
   const categoria = (orden.CategoriaServicioMantra || '').toUpperCase().trim();
+  if (categoria && activeServices.length > 0 && activeServices.includes(categoria)) {
+    return categoria;
+  }
   if (categoria === 'AVERIAS PRV') return 'AVERIAS PRV';
-  if (categoria === 'AVERIAS' || categoria === 'POSTVENTA') return 'AVERIAS';
   if (categoria === 'PROVINCIA') return 'PROVINCIA';
   if (categoria === 'INSTALACION') return 'INSTALACION';
+  if (categoria === 'AVERIAS' || categoria === 'POSTVENTA') return 'AVERIAS';
+  if (categoria) return categoria;
   
   const tipoOrden = (orden.TipoOrden || '').toUpperCase().trim();
   const producto = (orden.Producto || '').toUpperCase().trim();
@@ -320,7 +324,8 @@ async function ensureLogTableExists(dbOrPool) {
 
 async function sendMantraNotification(orden) {
   const { configs, sectores } = await getControlTables();
-  const tipoServicio = resolveServiceType(orden);
+  const activeServices = [...new Set((configs || []).filter(c => c.activo === 1).map(c => c.tipo_servicio))];
+  const tipoServicio = resolveServiceType(orden, activeServices);
   const sectorOperativo = (orden['Sector Operativo'] || '').toUpperCase();
 
   // 1. Determinar si va a la plantilla TRACKING o DEFAULT según SECTORES_PILOTO_TRACKING
@@ -419,7 +424,8 @@ async function sendMantraNotification(orden) {
 
 async function sendReprogramacionNotification(reprog, orden) {
   const { configs } = await getControlTables();
-  const tipoServicio = resolveServiceType(orden);
+  const activeServices = [...new Set((configs || []).filter(c => c.activo === 1).map(c => c.tipo_servicio))];
+  const tipoServicio = resolveServiceType(orden, activeServices);
 
   // Buscar configuración de REPROGRAMACION en CONFIG_PLANTILLAS_MANTRA
   const cfg = configs.find(c => c.tipo_servicio === tipoServicio && c.tipo_plantilla === 'REPROGRAMACION');
@@ -584,28 +590,35 @@ async function runQueueCron() {
       return;
     }
 
+    // Asegurar que POSTVENTA esté permitido en la cola si AVERIAS está activo (en caso de no tener plantilla propia aún)
+    const servicesInQueue = [...activeServices];
+    if (activeServices.includes('AVERIAS') && !servicesInQueue.includes('POSTVENTA')) {
+      servicesInQueue.push('POSTVENTA');
+    }
+
     // 1. Validar la hora actual en zona horaria America/Lima
     const options = { timeZone: 'America/Lima', hour12: false, hour: 'numeric' };
     const formatter = new Intl.DateTimeFormat([], options);
     const horaActual = parseInt(formatter.format(new Date()), 10);
 
-    // 2. Determinar el tramo objetivo basado en la hora actual (para AVERIAS y PROVINCIA)
+    // 2. Determinar el tramo objetivo basado en la hora actual (SOLO para AVERIAS)
     let tramoFiltro = null;
     if (horaActual >= 7 && horaActual <= 9) tramoFiltro = '08';
     else if (horaActual >= 11 && horaActual <= 13) tramoFiltro = '12';
     else if (horaActual >= 15 && horaActual <= 17) tramoFiltro = '16';
 
-    // Regla de horario para INSTALACION: de 7:00 AM a 7:00 PM (hora 7 a 18 inclusive) sin restricción de tramos
-    const isHorarioInstalacion = horaActual >= 7 && horaActual < 19;
-    const isInstalacionActivo = activeServices.includes('INSTALACION');
+    // Regla de horario para servicios continuos (INSTALACION, PROVINCIA, AVERIAS PRV, POSTVENTA):
+    // Funcionan de 7:00 AM a 7:00 PM (hora 7 a 18 inclusive) sin restricción de tramo ni ventanas
+    const isHorarioContinuo = horaActual >= 7 && horaActual < 19;
+    const hasActiveContinuous = servicesInQueue.some(s => s !== 'AVERIAS');
 
-    // Si no estamos en ventana de tramo (AVERIAS/PROVINCIA) ni en horario activo de INSTALACION, omitir ciclo
-    if (!tramoFiltro && (!isHorarioInstalacion || !isInstalacionActivo)) {
+    // Si no estamos en ventana de tramo (para AVERIAS) ni en horario continuo (para los demás servicios), omitir ciclo
+    if (!tramoFiltro && (!isHorarioContinuo || !hasActiveContinuous)) {
       return;
     }
 
     // 2.1 Limpieza automática de la cola: descartar IDs cuyas fechas no sean HOY, servicios inactivos o ya notificados HOY
-    const placeholders = activeServices.map(() => '?').join(',');
+    const placeholders = servicesInQueue.map(() => '?').join(',');
     await pool.query(`
       DELETE c FROM COLA_NOTIFICACIONES_MANTRA c
       LEFT JOIN ${MAIN_TABLE} t ON c.ordenId = t.OrdenId
@@ -618,11 +631,11 @@ async function runQueueCron() {
          OR ts.Tipo NOT IN (${placeholders})
          OR ts.Tipo IS NULL
          OR l.id IS NOT NULL
-    `, activeServices);
+    `, servicesInQueue);
 
     // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola, sean de HOY y pertenezcan a servicios activos:
-    // - INSTALACION: Sin restricción de tramo horario (se despacha de 7 a 7 inmediatamente)
-    // - AVERIAS y PROVINCIA: Sujetos a sus ventanas horarias normales (tramos 08, 12, 16)
+    // - PROVINCIA, AVERIAS PRV, POSTVENTA, INSTALACION: Sin restricción de tramo ni ventanas (despacho continuo 7 a 7)
+    // - SOLO AVERIAS: Sujeto a sus 3 ventanas horarias tradicionales (tramos 08, 12, 16)
     const queryStr = `
       SELECT 
         t.OrdenId,
@@ -660,9 +673,9 @@ async function runQueueCron() {
         AND t.Estado IN ('Agendada', 'Pendiente', 'En camino')
         AND DATE(t.\`F.Soli\`) = CURDATE() 
         AND (
-          (ts.Tipo = 'INSTALACION' AND ? = 1)
+          (ts.Tipo <> 'AVERIAS' AND ? = 1)
           OR
-          (ts.Tipo <> 'INSTALACION' AND ? IS NOT NULL AND TIME(t.\`F.Soli\`) LIKE ?)
+          (ts.Tipo = 'AVERIAS' AND ? IS NOT NULL AND TIME(t.\`F.Soli\`) LIKE ?)
         )
         AND l.id IS NULL
       GROUP BY 
@@ -690,8 +703,8 @@ async function runQueueCron() {
     `;
     const searchPattern = tramoFiltro ? `${tramoFiltro}%` : null;
     const queryParams = [
-      ...activeServices,
-      isHorarioInstalacion && isInstalacionActivo ? 1 : 0,
+      ...servicesInQueue,
+      isHorarioContinuo && hasActiveContinuous ? 1 : 0,
       searchPattern,
       searchPattern
     ];
@@ -702,7 +715,9 @@ async function runQueueCron() {
       return;
     }
 
-    const tramoLog = tramoFiltro ? `Tramo [${tramoFiltro}:00] activo` : 'Fuera de ventana (Solo Instalaciones)';
+    const tramoLog = tramoFiltro 
+      ? `Ventana AVERIAS [${tramoFiltro}:00] + Servicios Continuos (Instalación/Provincia/Averías PRV/Postventa)` 
+      : 'Servicios Continuos (Instalación/Provincia/Averías PRV/Postventa)';
     console.log(`[QUEUE] ${tramoLog}. Procesando ${rows.length} órdenes únicas en cola desde ${MAIN_TABLE}.`);
 
     for (const row of rows) {
@@ -733,7 +748,7 @@ async function runQueueCron() {
         AND DATE(r.fecha_solicitada) >= CURDATE()
         AND l.id IS NULL
       LIMIT 20
-    `, activeServices);
+    `, servicesInQueue);
 
     if (reprogs.length > 0) {
       console.log(`[QUEUE] Procesando ${reprogs.length} reprogramacion(es) pendiente(s)...`);
