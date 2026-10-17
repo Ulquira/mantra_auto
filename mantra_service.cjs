@@ -44,7 +44,7 @@ function resolveServiceType(orden, activeServices = []) {
   if (categoria === 'AVERIAS PRV') return 'AVERIAS PRV';
   if (categoria === 'PROVINCIA') return 'PROVINCIA';
   if (categoria === 'INSTALACION') return 'INSTALACION';
-  if (categoria === 'AVERIAS' || categoria === 'POSTVENTA') return 'AVERIAS';
+  if (categoria === 'AVERIAS') return 'AVERIAS';
   if (categoria) return categoria;
   
   const tipoOrden = (orden.TipoOrden || '').toUpperCase().trim();
@@ -590,12 +590,6 @@ async function runQueueCron() {
       return;
     }
 
-    // Asegurar que POSTVENTA esté permitido en la cola si AVERIAS está activo (en caso de no tener plantilla propia aún)
-    const servicesInQueue = [...activeServices];
-    if (activeServices.includes('AVERIAS') && !servicesInQueue.includes('POSTVENTA')) {
-      servicesInQueue.push('POSTVENTA');
-    }
-
     // 1. Validar la hora actual en zona horaria America/Lima
     const options = { timeZone: 'America/Lima', hour12: false, hour: 'numeric' };
     const formatter = new Intl.DateTimeFormat([], options);
@@ -607,18 +601,18 @@ async function runQueueCron() {
     else if (horaActual >= 11 && horaActual <= 13) tramoFiltro = '12';
     else if (horaActual >= 15 && horaActual <= 17) tramoFiltro = '16';
 
-    // Regla de horario para servicios continuos (INSTALACION, PROVINCIA, AVERIAS PRV, POSTVENTA):
+    // Regla de horario para servicios continuos (INSTALACION, PROVINCIA, AVERIAS PRV y cualquier otro que tenga plantilla activa):
     // Funcionan de 7:00 AM a 7:00 PM (hora 7 a 18 inclusive) sin restricción de tramo ni ventanas
     const isHorarioContinuo = horaActual >= 7 && horaActual < 19;
-    const hasActiveContinuous = servicesInQueue.some(s => s !== 'AVERIAS');
+    const hasActiveContinuous = activeServices.some(s => s !== 'AVERIAS');
 
-    // Si no estamos en ventana de tramo (para AVERIAS) ni en horario continuo (para los demás servicios), omitir ciclo
+    // Si no estamos en ventana de tramo (para AVERIAS) ni en horario continuo (para los demás servicios activos), omitir ciclo
     if (!tramoFiltro && (!isHorarioContinuo || !hasActiveContinuous)) {
       return;
     }
 
     // 2.1 Limpieza automática de la cola: descartar IDs cuyas fechas no sean HOY, servicios inactivos o ya notificados HOY
-    const placeholders = servicesInQueue.map(() => '?').join(',');
+    const placeholders = activeServices.map(() => '?').join(',');
     await pool.query(`
       DELETE c FROM COLA_NOTIFICACIONES_MANTRA c
       LEFT JOIN ${MAIN_TABLE} t ON c.ordenId = t.OrdenId
@@ -631,10 +625,10 @@ async function runQueueCron() {
          OR ts.Tipo NOT IN (${placeholders})
          OR ts.Tipo IS NULL
          OR l.id IS NOT NULL
-    `, servicesInQueue);
+    `, activeServices);
 
     // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola, sean de HOY y pertenezcan a servicios activos:
-    // - PROVINCIA, AVERIAS PRV, POSTVENTA, INSTALACION: Sin restricción de tramo ni ventanas (despacho continuo 7 a 7)
+    // - Servicios continuos activos (INSTALACION, PROVINCIA, AVERIAS PRV, etc.): Sin restricción de tramo ni ventanas (despacho continuo 7 a 7)
     // - SOLO AVERIAS: Sujeto a sus 3 ventanas horarias tradicionales (tramos 08, 12, 16)
     const queryStr = `
       SELECT 
@@ -703,7 +697,7 @@ async function runQueueCron() {
     `;
     const searchPattern = tramoFiltro ? `${tramoFiltro}%` : null;
     const queryParams = [
-      ...servicesInQueue,
+      ...activeServices,
       isHorarioContinuo && hasActiveContinuous ? 1 : 0,
       searchPattern,
       searchPattern
@@ -748,7 +742,7 @@ async function runQueueCron() {
         AND DATE(r.fecha_solicitada) >= CURDATE()
         AND l.id IS NULL
       LIMIT 20
-    `, servicesInQueue);
+    `, activeServices);
 
     if (reprogs.length > 0) {
       console.log(`[QUEUE] Procesando ${reprogs.length} reprogramacion(es) pendiente(s)...`);
