@@ -37,31 +37,14 @@ async function getControlTables(forceRefresh = false) {
 }
 
 function resolveServiceType(orden, activeServices = []) {
-  const categoria = (orden.CategoriaServicioMantra || '').toUpperCase().trim();
-  if (categoria && activeServices.length > 0 && activeServices.includes(categoria)) {
-    return categoria;
+  const tipo = (orden.CategoriaServicioMantra || '').toUpperCase().trim();
+  if (!tipo || tipo === 'NO') {
+    return null;
   }
-  if (categoria === 'AVERIAS PRV') return 'AVERIAS PRV';
-  if (categoria === 'PROVINCIA') return 'PROVINCIA';
-  if (categoria === 'INSTALACION') return 'INSTALACION';
-  if (categoria === 'AVERIAS') return 'AVERIAS';
-  if (categoria) return categoria;
-  
-  const tipoOrden = (orden.TipoOrden || '').toUpperCase().trim();
-  const producto = (orden.Producto || '').toUpperCase().trim();
-  
-  // Si es Averías Provincia explícito
-  if (producto === 'AVERIAS PROVINCIA' || (producto.includes('AVERIA') && producto.includes('PROV'))) {
-    return 'AVERIAS PRV';
+  if (activeServices.length > 0) {
+    return activeServices.includes(tipo) ? tipo : null;
   }
-  
-  if (tipoOrden.includes('AVERIA') || tipoOrden.includes('VISITA') || producto.includes('AVERIA')) {
-    return 'AVERIAS';
-  }
-  if (producto.includes('PROV')) {
-    return 'PROVINCIA';
-  }
-  return 'INSTALACION';
+  return tipo;
 }
 
 function isSectorPiloto(tipoServicio, sectorOperativo, sectoresList) {
@@ -325,7 +308,24 @@ async function ensureLogTableExists(dbOrPool) {
 async function sendMantraNotification(orden) {
   const { configs, sectores } = await getControlTables();
   const activeServices = [...new Set((configs || []).filter(c => c.activo === 1).map(c => c.tipo_servicio))];
-  const tipoServicio = resolveServiceType(orden, activeServices);
+  let tipoServicio = resolveServiceType(orden, activeServices);
+
+  // Si no vino CategoriaServicioMantra pre-cruzado, consultarlo de TipoServicio
+  if (!tipoServicio && !orden.CategoriaServicioMantra && orden.Producto) {
+    const [tsRows] = await pool.query('SELECT Tipo FROM TipoServicio WHERE Servicio = ? LIMIT 1', [orden.Producto]);
+    if (tsRows.length > 0 && tsRows[0].Tipo && tsRows[0].Tipo !== 'NO') {
+      const tipoDb = tsRows[0].Tipo.toUpperCase().trim();
+      if (activeServices.includes(tipoDb)) {
+        tipoServicio = tipoDb;
+      }
+    }
+  }
+
+  if (!tipoServicio) {
+    console.log(`[SKIP] La orden ${orden.OrdenId} (Producto: ${orden.Producto || 'N/A'}, Tipo: ${orden.CategoriaServicioMantra || 'N/A'}) no coincide con ningún tipo de servicio activo en CONFIG_PLANTILLAS_MANTRA.`);
+    return { success: true, skipped: true, errorDetail: `El Tipo '${orden.CategoriaServicioMantra || orden.Producto || 'DESCONOCIDO'}' no coincide con ninguna plantilla activa en CONFIG_PLANTILLAS_MANTRA.` };
+  }
+
   const sectorOperativo = (orden['Sector Operativo'] || '').toUpperCase();
 
   // 1. Determinar si va a la plantilla TRACKING o DEFAULT según SECTORES_PILOTO_TRACKING
@@ -425,7 +425,22 @@ async function sendMantraNotification(orden) {
 async function sendReprogramacionNotification(reprog, orden) {
   const { configs } = await getControlTables();
   const activeServices = [...new Set((configs || []).filter(c => c.activo === 1).map(c => c.tipo_servicio))];
-  const tipoServicio = resolveServiceType(orden, activeServices);
+  let tipoServicio = resolveServiceType(orden, activeServices);
+
+  if (!tipoServicio && !orden.CategoriaServicioMantra && orden.Producto) {
+    const [tsRows] = await pool.query('SELECT Tipo FROM TipoServicio WHERE Servicio = ? LIMIT 1', [orden.Producto]);
+    if (tsRows.length > 0 && tsRows[0].Tipo && tsRows[0].Tipo !== 'NO') {
+      const tipoDb = tsRows[0].Tipo.toUpperCase().trim();
+      if (activeServices.includes(tipoDb)) {
+        tipoServicio = tipoDb;
+      }
+    }
+  }
+
+  if (!tipoServicio) {
+    console.log(`[SKIP] Reprogramación ID ${reprog.id} omitida: Servicio '${orden.CategoriaServicioMantra || orden.Producto || 'N/A'}' no coincide con plantillas activas.`);
+    return { success: true, skipped: true, errorDetail: `Servicio no configurado en CONFIG_PLANTILLAS_MANTRA.` };
+  }
 
   // Buscar configuración de REPROGRAMACION en CONFIG_PLANTILLAS_MANTRA
   const cfg = configs.find(c => c.tipo_servicio === tipoServicio && c.tipo_plantilla === 'REPROGRAMACION');
