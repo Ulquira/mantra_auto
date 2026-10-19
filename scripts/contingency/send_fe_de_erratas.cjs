@@ -8,15 +8,15 @@ const URL_SEND_TEMPLATE = "https://wbpback2pro2.mantra.chat/contacts/send";
 const FE_ERRATAS_CONFIG = {
   Averias: {
     name: "Visita Técnica (Averías)",
-    GROUP_ID: process.env.MANTRA_AVERIAS_GROUP_ID || "68508b455ba42fd0a6660300",
-    API_KEY: process.env.MANTRA_AVERIAS_API_KEY || "618684ea-0e61-478f-9b22-bc0fd8b8a934",
-    TEMPLATE_ID: process.env.MANTRA_AVERIAS_FE_ERRATAS_TEMPLATE_ID || "6a9ed6b828ea246e3f3ab36b"
+    GROUP_ID: "68508b455ba42fd0a6660300",
+    API_KEY: "618684ea-0e61-478f-9b22-bc0fd8b8a934",
+    TEMPLATE_ID: "6a9ed6b828ea246e3f3ab36b"
   },
   Instalaciones: {
     name: "Instalaciones (Lima y Provincia)",
-    GROUP_ID: process.env.MANTRA_INSTALACION_GROUP_ID || "685dc70e53dd0ac2492c69ca",
-    API_KEY: process.env.MANTRA_INSTALACION_API_KEY || "3d0d59f1-f3ea-47be-b5b0-d7ffca33817d",
-    TEMPLATE_ID: process.env.MANTRA_INSTALACION_FE_ERRATAS_TEMPLATE_ID || "6a9ed6c428ea246e3f3ab36c"
+    GROUP_ID: "685dc70e53dd0ac2492c69ca",
+    API_KEY: "3d0d59f1-f3ea-47be-b5b0-d7ffca33817d",
+    TEMPLATE_ID: "6a9ed6c428ea246e3f3ab36c"
   }
 };
 
