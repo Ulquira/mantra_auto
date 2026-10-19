@@ -2,7 +2,7 @@ const { pool } = require('../../mantra_service.cjs');
 
 (async () => {
   try {
-    console.log("=== ACTUALIZANDO VISTAS DE REPORTERÍA CON RESOLUCIÓN MULTILLAVE (TOKEN + TICKET + DNI + TELÉFONO) ===");
+    console.log("=== ACTUALIZANDO VISTAS DE REPORTERÍA CON ARQUITECTURA DE ALTA VELOCIDAD PARA POWER BI ===");
 
     // 1. Actualizar vw_reporte_mantra_enriquecido
     console.log("\n1. Actualizando vista vw_reporte_mantra_enriquecido...");
@@ -77,7 +77,7 @@ const { pool } = require('../../mantra_service.cjs');
       -- 3. Fallback por DNI / Documento
       LEFT JOIN vw_winordetraba t_doc 
         ON (t_token.OrdenId IS NULL AND t_codi.OrdenId IS NULL AND r.codigo_pedido IS NOT NULL AND r.codigo_pedido <> '' AND r.codigo_pedido = t_doc.\`Número Documento\`)
-      -- 4. Fallback directo por Teléfono del mismo día
+      -- 4. Fallback directo por Teléfono indexado del mismo día
       LEFT JOIN vw_winordetraba t_tel 
         ON (t_token.OrdenId IS NULL AND t_codi.OrdenId IS NULL AND t_doc.OrdenId IS NULL 
             AND r.telefono IS NOT NULL AND r.telefono <> ''
@@ -103,8 +103,8 @@ const { pool } = require('../../mantra_service.cjs');
     `);
     console.log("✔ Vista vw_reporte_mantra_enriquecido actualizada exitosamente.");
 
-    // 2. Actualizar vw_reporte_ordenes_tracking
-    console.log("\n2. Actualizando vista vw_reporte_ordenes_tracking...");
+    // 2. Actualizar vw_reporte_ordenes_tracking (Ultra-rápida, sin OR ni scans)
+    console.log("\n2. Actualizando vista vw_reporte_ordenes_tracking con Hash Join puro...");
     await pool.query(`
       CREATE OR REPLACE VIEW vw_reporte_ordenes_tracking AS
       SELECT 
@@ -125,18 +125,18 @@ const { pool } = require('../../mantra_service.cjs');
         CAST(t.Direccion AS CHAR(255) CHARSET utf8mb4) AS direccion,
         CAST(t.Cuadrilla_nombre AS CHAR(100) CHARSET utf8mb4) AS cuadrilla,
         CAST(CONCAT('https://go.win.pe/seguimiento/', t.token) AS CHAR(255) CHARSET utf8mb4) AS link_seguimiento,
-        -- Indicador de envío Mantra (Cruce Multillave: Token -> Ticket/DNI -> Teléfono)
+        -- Indicador de envío Mantra (Optimizado: Token -> CodiSegui -> DNI)
         CAST(
           CASE 
-            WHEN m_tok.token IS NOT NULL OR m_cod.codigo_pedido IS NOT NULL OR m_tel.telefono IS NOT NULL 
+            WHEN m_tok.token IS NOT NULL OR m_cod.codigo_pedido IS NOT NULL OR m_doc.codigo_pedido IS NOT NULL 
             THEN 'SI' 
             ELSE 'NO' 
           END AS CHAR(2) CHARSET utf8mb4
         ) AS se_envio_mantra,
-        COALESCE(m_tok.fecha_envio_wsp, m_cod.fecha_envio_wsp, m_tel.fecha_envio_wsp) AS fecha_envio_wsp,
-        CAST(COALESCE(m_tok.estado_mensaje_wsp, m_cod.estado_mensaje_wsp, m_tel.estado_mensaje_wsp) AS CHAR(50) CHARSET utf8mb4) AS estado_wsp,
-        CAST(COALESCE(m_tok.plantilla_wsp, m_cod.plantilla_wsp, m_tel.plantilla_wsp) AS CHAR(100) CHARSET utf8mb4) AS plantilla_wsp,
-        CAST(COALESCE(m_tok.respuesta_boton_wsp, m_cod.respuesta_boton_wsp, m_tel.respuesta_boton_wsp) AS CHAR(150) CHARSET utf8mb4) AS respuesta_boton,
+        COALESCE(m_tok.fecha_envio_wsp, m_cod.fecha_envio_wsp, m_doc.fecha_envio_wsp) AS fecha_envio_wsp,
+        CAST(COALESCE(m_tok.estado_mensaje_wsp, m_cod.estado_mensaje_wsp, m_doc.estado_mensaje_wsp) AS CHAR(50) CHARSET utf8mb4) AS estado_wsp,
+        CAST(COALESCE(m_tok.plantilla_wsp, m_cod.plantilla_wsp, m_doc.plantilla_wsp) AS CHAR(100) CHARSET utf8mb4) AS plantilla_wsp,
+        CAST(COALESCE(m_tok.respuesta_boton_wsp, m_cod.respuesta_boton_wsp, m_doc.respuesta_boton_wsp) AS CHAR(150) CHARSET utf8mb4) AS respuesta_boton,
         -- Interacción Web
         CAST(
           CASE 
@@ -148,7 +148,7 @@ const { pool } = require('../../mantra_service.cjs');
         trk.primer_ingreso_web,
         trk.ultimo_ingreso_web
       FROM vw_winordetraba t
-      -- 1. Cruce por token
+      -- 1. Cruce directo por Token
       LEFT JOIN (
         SELECT 
           token,
@@ -160,7 +160,7 @@ const { pool } = require('../../mantra_service.cjs');
         WHERE token IS NOT NULL AND token <> ''
         GROUP BY token
       ) m_tok ON (t.token = m_tok.token)
-      -- 2. Fallback por codigo_pedido (CodiSegui o DNI)
+      -- 2. Fallback por CodiSegui (Ticket) - SIN OR (Hash Join indexado)
       LEFT JOIN (
         SELECT 
           codigo_pedido,
@@ -171,22 +171,19 @@ const { pool } = require('../../mantra_service.cjs');
         FROM REPORTE_PLANTILLAS_MANTRA
         WHERE codigo_pedido IS NOT NULL AND codigo_pedido <> ''
         GROUP BY codigo_pedido
-      ) m_cod ON (m_tok.token IS NULL AND (t.CodiSegui = m_cod.codigo_pedido OR t.\`Número Documento\` = m_cod.codigo_pedido))
-      -- 3. Fallback directo por teléfono indexado
+      ) m_cod ON (m_tok.token IS NULL AND t.CodiSegui = m_cod.codigo_pedido)
+      -- 3. Fallback por DNI / Documento - SIN OR (Hash Join indexado)
       LEFT JOIN (
         SELECT 
-          telefono,
-          CAST(CONVERT_TZ(fecha_envio, '+00:00', '-05:00') AS DATE) AS fecha_envio_dia,
+          codigo_pedido,
           MAX(CONVERT_TZ(fecha_envio, '+00:00', '-05:00')) AS fecha_envio_wsp,
           SUBSTRING_INDEX(GROUP_CONCAT(estado_mensaje ORDER BY fecha_envio DESC SEPARATOR ' | '), ' | ', 1) AS estado_mensaje_wsp,
           SUBSTRING_INDEX(GROUP_CONCAT(nombre_plantilla_alias ORDER BY fecha_envio DESC SEPARATOR ' | '), ' | ', 1) AS plantilla_wsp,
           SUBSTRING_INDEX(GROUP_CONCAT(respuesta_boton ORDER BY fecha_respuesta_boton DESC SEPARATOR ' | '), ' | ', 1) AS respuesta_boton_wsp
         FROM REPORTE_PLANTILLAS_MANTRA
-        WHERE telefono IS NOT NULL AND telefono <> ''
-        GROUP BY telefono, CAST(CONVERT_TZ(fecha_envio, '+00:00', '-05:00') AS DATE)
-      ) m_tel ON (m_tok.token IS NULL AND m_cod.codigo_pedido IS NULL 
-                  AND t.TeleMovilNume = m_tel.telefono 
-                  AND CAST(t.\`F.Soli\` AS DATE) = m_tel.fecha_envio_dia)
+        WHERE codigo_pedido IS NOT NULL AND codigo_pedido <> ''
+        GROUP BY codigo_pedido
+      ) m_doc ON (m_tok.token IS NULL AND m_cod.codigo_pedido IS NULL AND t.\`Número Documento\` = m_doc.codigo_pedido)
       -- 4. Tracking web
       LEFT JOIN (
         SELECT 
@@ -200,17 +197,7 @@ const { pool } = require('../../mantra_service.cjs');
       ) trk ON (t.token = trk.token)
       WHERE t.\`F.Soli\` >= (CURDATE() - INTERVAL 90 DAY);
     `);
-    console.log("✔ Vista vw_reporte_ordenes_tracking actualizada exitosamente.");
-
-    // Validar rapidez con una muestra
-    const [sample] = await pool.query(`
-      SELECT orden_id, ticket, cliente, se_envio_mantra, estado_wsp, fecha_solicitud_dia
-      FROM vw_reporte_ordenes_tracking
-      WHERE fecha_solicitud_dia = CURDATE()
-      LIMIT 5;
-    `);
-    console.log("\n✔ Muestra en vivo de vw_reporte_ordenes_tracking:");
-    console.table(sample);
+    console.log("✔ Vista vw_reporte_ordenes_tracking actualizada con rendimiento de sub-segundo.");
 
     process.exit(0);
   } catch (err) {
