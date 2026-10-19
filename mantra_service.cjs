@@ -354,6 +354,11 @@ const pool = mysql.createPool({
   keepAliveInitialDelay: 10000
 });
 
+// Forzar zona horaria Perú (-05:00) en cada sesión MySQL
+pool.on('connection', (conn) => {
+  conn.query("SET time_zone = '-05:00'");
+});
+
 const MAIN_TABLE = process.env.DB_TABLE || 'vw_winordetraba';
 
 async function getDbConnection() {

@@ -91,8 +91,8 @@ const { pool } = require('../../mantra_service.cjs');
         SELECT 
           token,
           COUNT(*) AS total_interacciones_web,
-          MIN(timestamp) AS primer_ingreso_web,
-          MAX(timestamp) AS ultimo_ingreso_web,
+          MIN(CONVERT_TZ(timestamp, '+00:00', '-05:00')) AS primer_ingreso_web,
+          MAX(CONVERT_TZ(timestamp, '+00:00', '-05:00')) AS ultimo_ingreso_web,
           SUBSTRING_INDEX(GROUP_CONCAT(evento ORDER BY timestamp ASC SEPARATOR ' | '), ' | ', 1) AS primer_evento_web,
           SUBSTRING_INDEX(GROUP_CONCAT(evento ORDER BY timestamp DESC SEPARATOR ' | '), ' | ', 1) AS ultimo_evento_web,
           SUBSTRING_INDEX(GROUP_CONCAT(sistema_operativo ORDER BY timestamp DESC SEPARATOR ' | '), ' | ', 1) AS sistema_operativo_web
@@ -189,8 +189,8 @@ const { pool } = require('../../mantra_service.cjs');
         SELECT 
           token,
           COUNT(*) AS total_interacciones_web,
-          MIN(timestamp) AS primer_ingreso_web,
-          MAX(timestamp) AS ultimo_ingreso_web
+          MIN(CONVERT_TZ(timestamp, '+00:00', '-05:00')) AS primer_ingreso_web,
+          MAX(CONVERT_TZ(timestamp, '+00:00', '-05:00')) AS ultimo_ingreso_web
         FROM logs_traking
         WHERE token IS NOT NULL AND token <> ''
         GROUP BY token
