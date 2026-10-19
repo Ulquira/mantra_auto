@@ -4,8 +4,28 @@ require('dotenv').config();
 const URL_CREATE_CONTACT = "https://wbpback2pro2.mantra.chat/contacts/new";
 const URL_CREATE_CONTACT_BY_USER = "https://wbpback2pro2.mantra.chat/contacts/newbyuser";
 const URL_SEND_TEMPLATE = "https://wbpback2pro2.mantra.chat/contacts/send";
-const AGENT_EMAIL_INSTALACION_LIMA = "jvieras@win.pe";
-const AGENT_EMAIL_INSTALACION_PROVINCIA = "oolivares@win.pe";
+const AGENT_EMAIL_INSTALACION_LIMA = process.env.AGENT_EMAIL_INSTALACION_LIMA || "jvieras@win.pe";
+const AGENT_EMAIL_INSTALACION_PROVINCIA = process.env.AGENT_EMAIL_INSTALACION_PROVINCIA || "oolivares@win.pe";
+const API_TIMEOUT_MS = parseInt(process.env.MANTRA_API_TIMEOUT_MS, 10) || 10000;
+
+// Configuración de credenciales de Mantra para retrocompatibilidad con scripts utilitarios
+const MANTRA_CONFIG = {
+  Averias: {
+    GROUP_ID: process.env.MANTRA_AVERIAS_GROUP_ID || "68508b455ba42fd0a6660300",
+    API_KEY: process.env.MANTRA_AVERIAS_API_KEY || "618684ea-0e61-478f-9b22-bc0fd8b8a934",
+    TEMPLATE_ID: process.env.MANTRA_AVERIAS_TEMPLATE_ID || "68fac2ea40478663c8b51c36"
+  },
+  Instalacion: {
+    GROUP_ID: process.env.MANTRA_INSTALACION_GROUP_ID || "685dc70e53dd0ac2492c69ca",
+    API_KEY: process.env.MANTRA_INSTALACION_API_KEY || "3d0d59f1-f3ea-47be-b5b0-d7ffca33817d",
+    TEMPLATE_ID: process.env.MANTRA_INSTALACION_TEMPLATE_ID || "6ac5632ba2cf3953677eb191"
+  },
+  Provincia: {
+    GROUP_ID: process.env.MANTRA_PROVINCIA_GROUP_ID || "685dc70e53dd0ac2492c69ca",
+    API_KEY: process.env.MANTRA_PROVINCIA_API_KEY || "3d0d59f1-f3ea-47be-b5b0-d7ffca33817d",
+    TEMPLATE_ID: process.env.MANTRA_PROVINCIA_TEMPLATE_ID || "6ad14706e3ce4ddb1d9f69a7"
+  }
+};
 
 // Caché en memoria para reglas de tablas de control (TTL: 2 minutos)
 let cacheConfig = null;
@@ -126,16 +146,66 @@ function extractFirstName(fullName) {
 
 function formatDateSpanish(rawDate) {
   if (!rawDate) return "fecha por confirmar";
-  const dateObj = new Date(rawDate);
-  if (isNaN(dateObj.getTime())) return String(rawDate);
+  
   const dias = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
   const meses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+  function formatPartsFromDate(dateObj) {
+    try {
+      const formatter = new Intl.DateTimeFormat('es-PE', {
+        timeZone: 'America/Lima',
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long'
+      });
+      const parts = formatter.formatToParts(dateObj);
+      const weekday = (parts.find(p => p.type === 'weekday')?.value || '').trim();
+      const day = (parts.find(p => p.type === 'day')?.value || '').trim();
+      const month = (parts.find(p => p.type === 'month')?.value || '').trim();
+
+      if (weekday && day && month) {
+        const diaCapitalizado = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+        const mesCapitalizado = month.charAt(0).toUpperCase() + month.slice(1);
+        return `${diaCapitalizado} ${day} de ${mesCapitalizado}`;
+      }
+    } catch (_) {}
+
+    return `${dias[dateObj.getDay()]} ${dateObj.getDate()} de ${meses[dateObj.getMonth()]}`;
+  }
+
+  // Caso 1: String ISO con zona horaria explícita ('2026-10-20T01:30:00.000Z')
+  if (typeof rawDate === 'string' && (rawDate.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(rawDate))) {
+    const d = new Date(rawDate);
+    if (!isNaN(d.getTime())) {
+      return formatPartsFromDate(d);
+    }
+  }
+
+  // Caso 2: String fecha MySQL sin zona ('YYYY-MM-DD' o 'YYYY-MM-DD HH:mm:ss')
+  if (typeof rawDate === 'string') {
+    const match = rawDate.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+    if (match) {
+      const year = parseInt(match[1], 10);
+      const month = parseInt(match[2], 10) - 1;
+      const day = parseInt(match[3], 10);
+      
+      const d = new Date(year, month, day);
+      if (!isNaN(d.getTime())) {
+        return `${dias[d.getDay()]} ${day} de ${meses[month]}`;
+      }
+    }
+  }
+
+  // Caso 3: Objeto Date nativo
+  if (rawDate instanceof Date && !isNaN(rawDate.getTime())) {
+    return formatPartsFromDate(rawDate);
+  }
+
+  // Caso 4: Fallback
+  const dateObj = new Date(rawDate);
+  if (isNaN(dateObj.getTime())) return String(rawDate);
   
-  const diaSemana = dias[dateObj.getUTCDay()];
-  const diaMes = dateObj.getUTCDate();
-  const mes = meses[dateObj.getUTCMonth()];
-  
-  return `${diaSemana} ${diaMes} de ${mes}`;
+  return formatPartsFromDate(dateObj);
 }
 
 function formatTitleCase(str) {
@@ -386,7 +456,8 @@ async function sendMantraNotification(orden) {
     const resContact = await fetch(targetUrlContact, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(contactPayload)
+      body: JSON.stringify(contactPayload),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS)
     });
     
     const jsonContact = await resContact.json();
@@ -404,7 +475,8 @@ async function sendMantraNotification(orden) {
     const resTemplate = await fetch(URL_SEND_TEMPLATE, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(templatePayload)
+      body: JSON.stringify(templatePayload),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS)
     });
     
     const jsonTemplate = await resTemplate.json();
@@ -417,8 +489,11 @@ async function sendMantraNotification(orden) {
 
     return { success: true, errorDetail: null }; 
   } catch (err) {
-    console.error("   [ERROR CRÍTICO] Fallo en la red o API de Mantra:", err.message);
-    return { success: false, errorDetail: err.message };
+    const errorMsg = err.name === 'TimeoutError'
+      ? `Timeout de ${API_TIMEOUT_MS}ms esperando respuesta de Mantra API.`
+      : err.message;
+    console.error("   [ERROR CRÍTICO] Fallo en la red o API de Mantra:", errorMsg);
+    return { success: false, errorDetail: errorMsg };
   }
 }
 
@@ -502,7 +577,8 @@ async function sendReprogramacionNotification(reprog, orden) {
     const resContact = await fetch(targetUrlContact, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(contactPayload)
+      body: JSON.stringify(contactPayload),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS)
     });
     
     const jsonContact = await resContact.json();
@@ -520,7 +596,8 @@ async function sendReprogramacionNotification(reprog, orden) {
     const resTemplate = await fetch(URL_SEND_TEMPLATE, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(templatePayload)
+      body: JSON.stringify(templatePayload),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS)
     });
     
     const jsonTemplate = await resTemplate.json();
@@ -533,8 +610,11 @@ async function sendReprogramacionNotification(reprog, orden) {
 
     return { success: true, errorDetail: null }; 
   } catch (err) {
-    console.error("   [ERROR CRÍTICO] Fallo en la red o API de Mantra:", err.message);
-    return { success: false, errorDetail: err.message };
+    const errorMsg = err.name === 'TimeoutError'
+      ? `Timeout de ${API_TIMEOUT_MS}ms esperando respuesta de Mantra API.`
+      : err.message;
+    console.error("   [ERROR CRÍTICO] Fallo en la red o API de Mantra:", errorMsg);
+    return { success: false, errorDetail: errorMsg };
   }
 }
 
@@ -792,6 +872,7 @@ async function runQueueCron() {
 module.exports = {
   pool,
   MAIN_TABLE,
+  MANTRA_CONFIG,
   getControlTables,
   resolveServiceType,
   isSectorPiloto,
@@ -801,6 +882,7 @@ module.exports = {
   processOrderById,
   runQueueCron,
   buildDynamicCustomData,
+  buildHomologatedCustomData: buildDynamicCustomData,
   formatDateSpanish,
   formatTitleCase,
   formatRangoHorario

@@ -1,86 +1,166 @@
-# 📲 API Mantra - Automatización de Notificaciones WhatsApp (Producción)
+# 📲 API Mantra - Automatización de Notificaciones WhatsApp (WIN Telecom)
 
-Módulo independiente para la automatización, sincronización de contactos y envío automático de plantillas de WhatsApp a través de la API de **Mantra**.
-
----
-
-## 🚀 Descripción del Proyecto
-
-Este proyecto monitorea en tiempo real las órdenes en estado `Pendiente` en la tabla productiva `vw_winordetraba` mediante Triggers de MySQL y una cola de eventos (`COLA_NOTIFICACIONES_MANTRA`). Valida el tramo horario, el tipo de servicio en `tiposervicio` (Averías), formatea los campos requeridos (ticket, fecha, rango horario, dirección y enlace único de seguimiento), actualiza el contacto en Mantra y dispara la plantilla de notificación por WhatsApp de manera automática.
+Módulo integral y autónomo para la sincronización de contactos, automatización de eventos y envío programado de plantillas de WhatsApp a través de la API oficial de **Mantra Chat**, integrado con la base de datos operativa Phoenix (`vw_winordetraba`).
 
 ---
 
-## 📂 Estructura de Archivos
+## 🏗️ Arquitectura y Flujo de Operación
 
-- **`mantra_webhook.cjs`**: Servidor principal en Express que corre en Azure App Service:
-  1. Cron de Cola de eventos (cada 30s) que procesa órdenes `Pendiente` según los tramos de horario (07:00-09:00, 11:00-13:00, 15:00-17:00).
-  2. Cron de Reprogramaciones (cada minuto) para la tabla `reprogramaciones`.
-  3. Webhook HTTP `POST /webhook/estado-cambiado` para eventos inmediatos.
-- **`mantra_service.cjs`**: Módulo core de servicios y conexión con la API de Mantra.
-- **`mantra_cron.cjs`**: Script utilitario para ejecución por lotes manual.
-- **`setup_production_db.cjs`**: Script de inicialización de triggers e índices en la base de datos de producción (`vw_winordetraba`).
-- **`Documentacion_Mantra_API_unificada.pdf`**: Documentación oficial de la API de Mantra.
-- **`mantra_docs.txt`**: Extracción en texto plano de la documentación oficial de Mantra.
-
----
-
-## 🔑 Credenciales y Configuración de Mantra
-
-- **`groupId`**: `685dc70e53dd0ac2492c69ca`
-- **`apiKey`**: `3d0d59f1-f3ea-47be-b5b0-d7ffca33817d`
-- **`templateId`**: `6a7a457736ef53a657fc03ed`
-
-### Endpoints
-- **Creación/Actualización de Contactos**: `https://wbpback2pro2.mantra.chat/contacts/new`
-- **Envío de Plantilla**: `https://wbpback2pro2.mantra.chat/contacts/send`
-
----
-
-## 📋 Mapeo de Variables Personalizadas
-
-| Variable | Campo Origen | Descripción / Formato |
-| :--- | :--- | :--- |
-| **`custom_7`** | `ClienteFinal` | Nombre completo del cliente. |
-| **`custom_3`** | `IdenServi` | Plan/Campaña contratado (se extrae la parte relevante). |
-| **`custom_1`** | `F.Soli` (Fecha) | Día y mes en español (Ej: *11 de Agosto*). |
-| **`custom_2`** | `F.Soli` (Hora) | Tramo horario traducido (Ej: `08:00` → *8AM - 12PM*, `12:00` → *12PM - 4PM*, `16:00` → *4PM - 8PM*). |
-| **`custom_10`** | `token` | Enlace dinámico de seguimiento: `https://go.win.pe/seguimiento/[token]`. |
-
----
-
-## 🗄️ Esquema de Base de Datos
-
-### Tabla de Auditoría / Control: `LOG_NOTIFICACIONES_WSP`
-```sql
-CREATE TABLE IF NOT EXISTS LOG_NOTIFICACIONES_WSP (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  OrdenId INT NOT NULL,
-  EstadoNotificado VARCHAR(50) NOT NULL,
-  fecha_envio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  EnviadoExitosamente BOOLEAN DEFAULT TRUE,
-  DetallesError TEXT
-);
+```mermaid
+flowchart TD
+    A["Operaciones Phoenix (vw_winordetraba)"] -->|"Trigger INSERT/UPDATE (Pendiente/Agendada/En camino)"| B[("COLA_NOTIFICACIONES_MANTRA")]
+    
+    subgraph CoreEngine ["Motor de Procesamiento (mantra_webhook.cjs)"]
+        C["Cron Cola (Cada 30s)"] --> D["runQueueCron()"]
+        D --> E{"Validar Horario (America/Lima)"}
+        E -->|"7h a 19h Continuo"| F["Servicios Continuos (INSTALACION, PROVINCIA, etc.)"]
+        E -->|"Ventanas 07-09h, 11-13h, 15-17h"| G["AVERIAS (Tramos 08, 12, 16)"]
+        
+        F & G --> H["Cargar Tablas de Control (MySQL)"]
+        H --> I["CONFIG_PLANTILLAS_MANTRA (Caché TTL 2m)"]
+        H --> J["SECTORES_PILOTO_TRACKING (Piloto GPS)"]
+    end
+    
+    B --> D
+    
+    I --> K{"Deduplicación LOG_NOTIFICACIONES_WSP"}
+    K -->|"Ya enviado hoy"| L["Omitir [DEDUP SKIP]"]
+    K -->|"No enviado hoy"| M["Construir Variables Dinámicas"]
+    
+    M --> N["Mantra API: /contacts/new o /newbyuser"]
+    N --> O["Mantra API: /contacts/send"]
+    
+    O --> P[("Registrar en LOG_NOTIFICACIONES_WSP")]
+    P --> Q["Eliminar de COLA_NOTIFICACIONES_MANTRA"]
+    
+    subgraph SyncEngine ["Sincronización de Métricas"]
+        R["Cron Reportes (Cada 2h de 08:00 a 18:00)"] --> S["syncAllTemplates()"]
+        S --> T["Mantra API: /report/template/messages/ext"]
+        T --> U[("REPORTE_PLANTILLAS_MANTRA")]
+    end
 ```
 
 ---
 
-## 🛠️ Requisitos e Instalación
+## 📂 Estructura del Proyecto
 
-1. Instalar dependencias:
+El código está organizado de manera limpia y modular para facilitar mantenimiento y auditorías:
+
+```text
+API_Mantra/
+│
+├── mantra_webhook.cjs             # Servidor Express, Webhook HTTP y programación de Crons
+├── mantra_service.cjs             # Core de negocio, conexión MySQL (Pool) y API de Mantra
+├── mantra_cron.cjs                # Script utilitario para ejecución por lotes manual
+├── sync_all_template_reports.cjs  # Sincronizador de estados de mensajes y respuestas desde Mantra
+├── package.json                   # Dependencias y scripts de auditoría
+├── .env                           # Variables de entorno de conexión
+├── .gitignore                     # Protección de archivos sensibles, zips y PII
+│
+├── docs/                          # Documentación oficial y manuales técnicos
+│   ├── Documentacion_Mantra_API_unificada.pdf
+│   ├── mantra_docs.txt
+│   └── Pront.txt
+│
+├── data/historical/               # Resguardo histórico de datos fuera de Git
+│
+├── deploy/                        # Paquetes de despliegue (.zip)
+│
+└── scripts/
+    ├── audit/                     # Herramientas de auditoría de envíos, tramos y base de datos
+    │   ├── deep_audit.cjs         # Auditoría general histórica de duplicados y tramos
+    │   ├── audit_today.cjs        # Auditoría de órdenes y estados notificados hoy
+    │   └── ...
+    ├── database/                  # Creación de esquemas, vistas, índices y triggers
+    │   ├── setup_production_db.cjs
+    │   ├── setup_db_dedup_constraint.cjs
+    │   └── ...
+    ├── contingency/               # Scripts de remediación y fe de erratas
+    │   ├── send_fe_de_erratas.cjs
+    │   └── ...
+    └── tests/                     # Pruebas de integración y homologación de plantillas
+        ├── test_all_templates.cjs
+        └── ...
+```
+
+---
+
+## ⚙️ Configuración Dinámica en Base de Datos
+
+A diferencia de versiones anteriores con configuraciones fijas, **el sistema opera 100% controlado desde base de datos**.
+
+### 1. `CONFIG_PLANTILLAS_MANTRA`
+Controla qué plantillas, credenciales y mapeos de campos se usan según el servicio:
+
+| Columna | Descripción |
+| :--- | :--- |
+| **`tipo_servicio`** | Coincide 1:1 con `TipoServicio.Tipo` (`AVERIAS`, `INSTALACION`, `PROVINCIA`, `AVERIAS PRV`, etc.). |
+| **`tipo_plantilla`** | `TRACKING` (con link de seguimiento GPS), `DEFAULT` (sin tracking) o `REPROGRAMACION`. |
+| **`group_id`** | Identificador del grupo en Mantra Chat. |
+| **`api_key`** | Llave de autenticación para la API de Mantra. |
+| **`template_id`** | Identificador de la plantilla en Mantra. |
+| **`custom_1_campo` ... `custom_10_campo`** | Asignación de variables (`TICKET`, `FECHA`, `HORARIO`, `DIRECCION`, `LINK`, `PLAN`, `NOMBRE`, `TOKEN`, etc.). |
+| **`activo`** | `1` para procesar el servicio, `0` para deshabilitarlo completamente sin tocar código. |
+
+### 2. `SECTORES_PILOTO_TRACKING`
+Define los sectores operativos donde se activa la plantilla `TRACKING` con geolocalización del técnico:
+* Si el sector de la orden está activo (`activo = 1`), despacha la plantilla `TRACKING`.
+* Si no está en piloto, conmuta automáticamente a la plantilla `DEFAULT`.
+
+---
+
+## ⏰ Reglas de Negocio y Horarios de Despacho
+
+La evaluación temporal se realiza estrictamente en zona horaria de Perú (`America/Lima`):
+
+1. **Servicio AVERIAS:**
+   - **Tramo Mañana (08:00 - 12:00):** Se envía en la ventana de **07:00 a 09:00**.
+   - **Tramo Tarde (12:00 - 16:00):** Se envía en la ventana de **11:00 a 13:00**.
+   - **Tramo Noche (16:00 - 20:00):** Se envía en la ventana de **15:00 a 17:00**.
+   - *Fuera de esas ventanas, las órdenes de averías no se disparan.*
+
+2. **Servicios Continuos (INSTALACION, PROVINCIA, AVERIAS PRV y demás servicios activos):**
+   - Se despachan de manera inmediata y continua de **07:00 a 19:00**, sin restricción de ventanas por tramos.
+
+3. **Reprogramaciones:**
+   - Detecta cambios en la tabla `reprogramaciones` y notifica con la fecha y turno solicitados por el cliente.
+
+4. **Asignación Automática de Asesor:**
+   - En instalaciones de Lima y Provincia, se utiliza el endpoint `/contacts/newbyuser` para enrutar la conversación al asesor correspondiente.
+
+---
+
+## 🛡️ Deduplicación y Protección contra Reenvíos
+
+Para garantizar que ningún cliente reciba mensajes duplicados:
+1. **Filtro SQL Pre-envío:** Antes de invocar a Mantra, consulta `LOG_NOTIFICACIONES_WSP` asegurando que ni el `OrdenId` ni el `CodiSegui` (Ticket) tengan un envío exitoso hoy (`DATE(fecha_envio) = CURDATE()`).
+2. **Índice Único en Cola:** La tabla `COLA_NOTIFICACIONES_MANTRA` cuenta con restricción `UNIQUE (ordenId)` para evitar que la misma orden se encole más de una vez.
+3. **Manejo de Triggers con INSERT IGNORE:** Los triggers en `vw_winordetraba` usan `INSERT IGNORE` para absorber eventos concurrentes sin generar bloqueos en el motor de base de datos.
+
+---
+
+## 📊 Sincronización de Métricas y Reportería
+
+El script [sync_all_template_reports.cjs](file:///c:/Users/tonny/OneDrive%20-%20WI-NET%20TELECOM/Escritorio/API_Mantra/sync_all_template_reports.cjs) corre cada 2 horas (de 08:00 a 18:00) y consolida en `REPORTE_PLANTILLAS_MANTRA`:
+* Estado de entrega en WhatsApp: `sent`, `delivered`, `read`, `failed`.
+* Agente o asesor asignado en Mantra.
+* Clics y respuestas de botones rápidos (`respuesta_boton`, `fecha_respuesta_boton`).
+* Código de pedido / ticket asociado para cruce con PowerBI.
+
+---
+
+## 🚀 Comandos de Ejecución y Auditoría
+
 ```bash
-npm install
-```
-
-2. Configurar el archivo `.env` basado en `.env.example`:
-```env
-DB_HOST=phx-win-mysql-9508.mysql.database.azure.com
-DB_USER=phxadmin
-DB_PASSWORD=TuPassword
-DB_NAME=BD_Phoenix
-DB_PORT=3306
-```
-
-3. Ejecutar el cron manualmente o configurarlo como tarea programada:
-```bash
+# Iniciar servidor Webhook y Crons productivos (Azure App Service)
 npm start
+
+# Ejecutar auditoría rápida del día actual
+npm run audit:today
+
+# Ejecutar auditoría profunda de tramos, duplicados y reprogramaciones
+npm run audit:deep
+
+# Ejecutar manualmente escaneo batch
+npm run cron
 ```

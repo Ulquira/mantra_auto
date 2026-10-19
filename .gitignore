@@ -4,3 +4,17 @@ node_modules/
 azure_logs.zip
 azure_logs_extracted/
 
+# Empaquetados y zips de despliegue
+*.zip
+
+# Conflictos de sincronizacion de OneDrive
+*-DESKTOP-*
+* - Copia.*
+*.conflict
+
+# Datos con PII (telefonos y nombres de clientes)
+data/historical/
+*.csv
+clientes_no_debieron_enviarse.*
+fe_erratas_progreso.json
+

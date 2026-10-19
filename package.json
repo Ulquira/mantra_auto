@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node mantra_webhook.cjs",
     "cron": "node mantra_cron.cjs",
-    "setup-test": "node setup_test_mantra.cjs"
+    "setup-test": "node scripts/tests/setup_test_mantra.cjs",
+    "audit:today": "node scripts/audit/audit_today.cjs",
+    "audit:deep": "node scripts/audit/deep_audit.cjs"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

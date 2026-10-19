@@ -15,11 +15,14 @@ async function sleep(ms) {
 }
 
 function resolveCodigoPedido(item, cfg) {
+  // Aplanar el objeto si viene en la nueva estructura anidada customFields
+  const fields = item.customFields || item;
+
   // 1. Buscar en las columnas configuradas si alguna es TICKET o DOCUMENTO
   for (let i = 1; i <= 10; i++) {
     const colName = `custom_${i}_campo`;
     if (cfg && (cfg[colName] === 'TICKET' || cfg[colName] === 'DOCUMENTO')) {
-      const val = item[`custom_${i}`];
+      const val = fields[`custom_${i}`];
       if (val && typeof val === 'string' && val.trim() !== '' && !val.startsWith('http')) {
         return val.trim();
       }
@@ -27,19 +30,19 @@ function resolveCodigoPedido(item, cfg) {
   }
 
   // 2. Si custom_10 o custom_6 es ticket / documento y no es link ni plan
-  if (item.custom_10 && !String(item.custom_10).startsWith('http') && !/^(internet|paquete)/i.test(item.custom_10)) {
-    return String(item.custom_10).trim();
+  if (fields.custom_10 && !String(fields.custom_10).startsWith('http') && !/^(internet|paquete)/i.test(fields.custom_10)) {
+    return String(fields.custom_10).trim();
   }
-  if (item.custom_6 && !String(item.custom_6).startsWith('http') && !/^(internet|paquete)/i.test(item.custom_6)) {
-    return String(item.custom_6).trim();
+  if (fields.custom_6 && !String(fields.custom_6).startsWith('http') && !/^(internet|paquete)/i.test(fields.custom_6)) {
+    return String(fields.custom_6).trim();
   }
 
   // 3. Si custom_1 no es plan ni fecha, usar custom_1
-  if (item.custom_1 && !/^(internet|paquete|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)/i.test(item.custom_1)) {
-    return String(item.custom_1).trim();
+  if (fields.custom_1 && !/^(internet|paquete|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)/i.test(fields.custom_1)) {
+    return String(fields.custom_1).trim();
   }
 
-  return item.custom_1 ? String(item.custom_1).trim() : (item.contactId || null);
+  return fields.custom_1 ? String(fields.custom_1).trim() : (item.contactId || item._id || null);
 }
 
 /**
@@ -75,7 +78,8 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
           toDate: toDate,
           page: page,
           limit: 100
-        })
+        }),
+        signal: AbortSignal.timeout(15000)
       });
 
       const json = await res.json();
@@ -88,9 +92,18 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
       console.log(`   Página ${page}/${json.totalPages || 1}: Procesando ${rows.length} registros (Total general Mantra: ${json.total})...`);
 
       for (const item of rows) {
-        const itemToken = (item.custom_9 && String(item.custom_9).trim().length >= 20) 
-          ? String(item.custom_9).trim() 
-          : (item.custom_10 && String(item.custom_10).includes('/seguimiento/') ? String(item.custom_10).split('/seguimiento/').pop().trim() : null);
+        // Soporte híbrido para nueva estructura anidada o antigua plana
+        const fields = item.customFields || item;
+        const rawPhone = item.contactPhone || item.phone || '';
+        const cleanPhone = rawPhone ? String(rawPhone).replace(/\D/g, '').slice(-9) : '';
+        const name = item.contactName || item.name || null;
+
+        const custom9Val = fields.custom_9 ? String(fields.custom_9).trim() : null;
+        const custom10Val = fields.custom_10 ? String(fields.custom_10).trim() : null;
+
+        const itemToken = (custom9Val && custom9Val.length >= 20) 
+          ? custom9Val 
+          : (custom10Val && custom10Val.includes('/seguimiento/') ? custom10Val.split('/seguimiento/').pop().trim() : null);
 
         await pool.query(`
           INSERT INTO REPORTE_PLANTILLAS_MANTRA (
@@ -119,10 +132,10 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
             grupo_servicio = VALUES(grupo_servicio),
             nombre_plantilla_alias = VALUES(nombre_plantilla_alias);
         `, [
-          item._id || item.contactId,
-          item.name || null,
-          item.phone ? String(item.phone) : '',
-          item.email || null,
+          item.contactId || item._id,
+          name,
+          cleanPhone,
+          fields.email || item.email || null,
           item.agentName || null,
           item.sentBy || null,
           resolveCodigoPedido(item, cfg),
