@@ -98,6 +98,19 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
         const cleanPhone = rawPhone ? String(rawPhone).replace(/\D/g, '').slice(-9) : '';
         const name = item.contactName || item.name || null;
 
+        let itemOrdenId = null;
+        for (let i = 1; i <= 15; i++) {
+          const colName = `custom_${i}_campo`;
+          if (cfg && (cfg[colName] === 'ORDEN' || cfg[colName] === 'ORDENID' || cfg[colName] === 'ORDEN_ID') && fields[`custom_${i}`]) {
+            const num = parseInt(String(fields[`custom_${i}`]).trim(), 10);
+            if (!isNaN(num) && num > 0) { itemOrdenId = num; break; }
+          }
+        }
+        if (!itemOrdenId && fields.custom_15) {
+          const num = parseInt(String(fields.custom_15).trim(), 10);
+          if (!isNaN(num) && num > 0) { itemOrdenId = num; }
+        }
+
         let itemToken = null;
         for (let i = 1; i <= 15; i++) {
           const colName = `custom_${i}_campo`;
@@ -118,11 +131,11 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
           INSERT INTO REPORTE_PLANTILLAS_MANTRA (
             contacto_id, nombre, telefono, email,
             agente_asignado, enviado_por,
-            codigo_pedido, token,
+            codigo_pedido, orden_id, token,
             creado, fecha_envio, estado_mensaje, estado_chat,
             respuesta_boton, fecha_respuesta_boton, vendor_id,
             template_id, grupo_servicio, nombre_plantilla_alias
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON DUPLICATE KEY UPDATE
             nombre = VALUES(nombre),
             telefono = VALUES(telefono),
@@ -130,6 +143,7 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
             agente_asignado = VALUES(agente_asignado),
             enviado_por = VALUES(enviado_por),
             codigo_pedido = VALUES(codigo_pedido),
+            orden_id = COALESCE(VALUES(orden_id), orden_id),
             token = COALESCE(VALUES(token), token),
             creado = VALUES(creado),
             fecha_envio = VALUES(fecha_envio),
