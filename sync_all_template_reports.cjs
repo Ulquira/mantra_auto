@@ -19,9 +19,9 @@ function resolveCodigoPedido(item, cfg) {
   const fields = item.customFields || item;
 
   // 1. Buscar en las columnas configuradas si alguna es TICKET o DOCUMENTO
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 1; i <= 15; i++) {
     const colName = `custom_${i}_campo`;
-    if (cfg && (cfg[colName] === 'TICKET' || cfg[colName] === 'DOCUMENTO')) {
+    if (cfg && (cfg[colName] === 'TICKET' || cfg[colName] === 'DOCUMENTO' || cfg[colName] === 'ORDENID' || cfg[colName] === 'ORDEN_ID' || cfg[colName] === 'ORDEN')) {
       const val = fields[`custom_${i}`];
       if (val && typeof val === 'string' && val.trim() !== '' && !val.startsWith('http')) {
         return val.trim();
@@ -98,12 +98,21 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
         const cleanPhone = rawPhone ? String(rawPhone).replace(/\D/g, '').slice(-9) : '';
         const name = item.contactName || item.name || null;
 
-        const custom9Val = fields.custom_9 ? String(fields.custom_9).trim() : null;
-        const custom10Val = fields.custom_10 ? String(fields.custom_10).trim() : null;
-
-        const itemToken = (custom9Val && custom9Val.length >= 20) 
-          ? custom9Val 
-          : (custom10Val && custom10Val.includes('/seguimiento/') ? custom10Val.split('/seguimiento/').pop().trim() : null);
+        let itemToken = null;
+        for (let i = 1; i <= 15; i++) {
+          const colName = `custom_${i}_campo`;
+          if (cfg && cfg[colName] === 'TOKEN' && fields[`custom_${i}`]) {
+            const val = String(fields[`custom_${i}`]).trim();
+            if (val.length >= 20) { itemToken = val; break; }
+          }
+        }
+        if (!itemToken) {
+          const custom9Val = fields.custom_9 ? String(fields.custom_9).trim() : null;
+          const custom10Val = fields.custom_10 ? String(fields.custom_10).trim() : null;
+          itemToken = (custom9Val && custom9Val.length >= 20) 
+            ? custom9Val 
+            : (custom10Val && custom10Val.includes('/seguimiento/') ? custom10Val.split('/seguimiento/').pop().trim() : null);
+        }
 
         await pool.query(`
           INSERT INTO REPORTE_PLANTILLAS_MANTRA (

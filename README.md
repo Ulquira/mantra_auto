@@ -99,7 +99,7 @@ Controla qué plantillas, credenciales y mapeos de campos se usan según el serv
 | **`group_id`** | Identificador del grupo en Mantra Chat. |
 | **`api_key`** | Llave de autenticación para la API de Mantra. |
 | **`template_id`** | Identificador de la plantilla en Mantra. |
-| **`custom_1_campo` ... `custom_10_campo`** | Asignación de variables (`TICKET`, `FECHA`, `HORARIO`, `DIRECCION`, `LINK`, `PLAN`, `NOMBRE`, `TOKEN`, etc.). |
+| **`custom_1_campo` ... `custom_15_campo`** | Asignación de variables (`TICKET`, `FECHA`, `HORARIO`, `DIRECCION`, `LINK`, `PLAN`, `NOMBRE`, `TOKEN`, `ORDENID`, etc.). |
 | **`activo`** | `1` para procesar el servicio, `0` para deshabilitarlo completamente sin tocar código. |
 
 ### 2. `SECTORES_PILOTO_TRACKING`

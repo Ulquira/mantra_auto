@@ -278,6 +278,7 @@ function buildDynamicCustomData(orden, cfg, overrides = {}) {
   const documento = orden['Número Documento'] || orden.NumeroDocumento || orden.num_doc || '';
   const pin = orden.Pin_token ? String(orden.Pin_token).trim() : (orden.pin_token ? String(orden.pin_token).trim() : (orden.PIN ? String(orden.PIN).trim() : ''));
   const rawToken = orden.token ? String(orden.token).trim() : '';
+  const ordenIdVal = orden.OrdenId ? String(orden.OrdenId).trim() : (orden.ordenId ? String(orden.ordenId).trim() : '');
 
   const valueMap = {
     'TICKET': ticket,
@@ -293,7 +294,10 @@ function buildDynamicCustomData(orden, cfg, overrides = {}) {
     'DOCUMENTO': documento,
     'PIN': pin,
     'PIN_TOKEN': pin,
-    'TOKEN': rawToken
+    'TOKEN': rawToken,
+    'ORDENID': ordenIdVal,
+    'ORDEN_ID': ordenIdVal,
+    'ORDEN': ordenIdVal
   };
 
   function resolveVal(key, fallback = null) {
@@ -321,6 +325,17 @@ function buildDynamicCustomData(orden, cfg, overrides = {}) {
   }
   if (cfg.custom_9_campo) {
     data.custom_9 = resolveVal(cfg.custom_9_campo, null);
+  }
+
+  // Soporte extendido para custom_11 a custom_15 si están configurados
+  for (let i = 11; i <= 15; i++) {
+    const colName = `custom_${i}_campo`;
+    if (cfg && cfg[colName]) {
+      const val = resolveVal(cfg[colName], null);
+      if (val !== null && val !== undefined) {
+        data[`custom_${i}`] = val;
+      }
+    }
   }
 
   // Manejo de etiquetas: siempre agregar BotEnvio + TRAKING si corresponde
