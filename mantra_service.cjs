@@ -6,6 +6,7 @@ const URL_CREATE_CONTACT_BY_USER = "https://wbpback2pro2.mantra.chat/contacts/ne
 const URL_SEND_TEMPLATE = "https://wbpback2pro2.mantra.chat/contacts/send";
 const AGENT_EMAIL_INSTALACION_LIMA = process.env.AGENT_EMAIL_INSTALACION_LIMA || "jvieras@win.pe";
 const AGENT_EMAIL_INSTALACION_PROVINCIA = process.env.AGENT_EMAIL_INSTALACION_PROVINCIA || "oolivares@win.pe";
+const AGENT_EMAIL_AVERIAS_REGULAR_LIMA = process.env.AGENT_EMAIL_AVERIAS_REGULAR_LIMA || "vibanez@win.pe";
 const API_TIMEOUT_MS = parseInt(process.env.MANTRA_API_TIMEOUT_MS, 10) || 10000;
 
 // Configuración de credenciales de Mantra para retrocompatibilidad con scripts utilitarios
@@ -441,7 +442,8 @@ async function sendMantraNotification(orden) {
 
   const isInstalacionLima = tipoServicio === 'INSTALACION';
   const isInstalacionProvincia = tipoServicio === 'PROVINCIA';
-  const requiresAgentAssignment = isInstalacionLima || isInstalacionProvincia;
+  const isAveriasRegularLima = tipoServicio === 'AVERIAS' && (cfg.tipo_plantilla === 'DEFAULT' || !enPiloto);
+  const requiresAgentAssignment = isInstalacionLima || isInstalacionProvincia || isAveriasRegularLima;
   const targetUrlContact = requiresAgentAssignment ? URL_CREATE_CONTACT_BY_USER : URL_CREATE_CONTACT;
 
   const contactPayload = {
@@ -454,12 +456,16 @@ async function sendMantraNotification(orden) {
     contactPayload.userEmail = AGENT_EMAIL_INSTALACION_LIMA;
   } else if (isInstalacionProvincia) {
     contactPayload.userEmail = AGENT_EMAIL_INSTALACION_PROVINCIA;
+  } else if (isAveriasRegularLima) {
+    contactPayload.userEmail = AGENT_EMAIL_AVERIAS_REGULAR_LIMA;
   }
 
   try {
     const assignedAgentLog = isInstalacionLima 
       ? ` (Asignando a ${AGENT_EMAIL_INSTALACION_LIMA})` 
-      : (isInstalacionProvincia ? ` (Asignando a ${AGENT_EMAIL_INSTALACION_PROVINCIA})` : '');
+      : (isInstalacionProvincia 
+          ? ` (Asignando a ${AGENT_EMAIL_INSTALACION_PROVINCIA})` 
+          : (isAveriasRegularLima ? ` (Asignando a ${AGENT_EMAIL_AVERIAS_REGULAR_LIMA})` : ''));
     console.log(`1. Enviando petición para crear/actualizar contacto con variables dinámicas...${assignedAgentLog}`);
     const resContact = await fetch(targetUrlContact, {
       method: 'POST',
