@@ -2,7 +2,7 @@
 -- VISTA MAESTRA 360° DE CASOS, NOTIFICACIONES Y FUNNEL DE SEGUIMIENTO (TRACKING)
 -- Vista: vw_reporte_funnel_casos_360
 -- BD: BD_Phoenix
--- Cruce: vw_winordetraba + REPORTE_PLANTILLAS_MANTRA + logs_traking + reprogramaciones + encuestas
+-- Cruce: vw_winordetraba + tiposervicio + REPORTE_PLANTILLAS_MANTRA + logs_traking + reprogramaciones + encuestas
 -- =================================================================================
 
 CREATE OR REPLACE VIEW vw_reporte_funnel_casos_360 AS
@@ -12,13 +12,14 @@ SELECT
   t.ClienteFinal AS cliente,
   t.TeleMovilNume AS telefono,
   t.Producto AS producto,
+  COALESCE(ts.Tipo, 'OTRO') AS tipo_operacion,
   t.TipoTraba AS tipo_trabajo,
   t.Estado AS estado_ot,
   t.`F.Soli` AS fecha_solicitud,
   CAST(t.`F.Soli` AS DATE) AS fecha_solicitud_dia,
   t.`F.Visita` AS fecha_visita,
   t.`Sector Operativo` AS sector_operativo,
-  t.Localidad AS distrito,
+  COALESCE(NULLIF(TRIM(t.Zona), ''), t.Localidad) AS distrito,
   t.Provincia AS provincia,
   t.Region AS region,
   t.Cuadrilla_nombre AS cuadrilla,
@@ -78,6 +79,9 @@ SELECT
   enc.satisfaccion_comentario
   
 FROM vw_winordetraba t
+
+-- Cruce con tiposervicio para segmentación operativa (Instalación, Averías, Provincia, etc.)
+LEFT JOIN tiposervicio ts ON t.Producto = ts.Servicio
 
 -- Subconsulta Mantra indexada por orden_id
 LEFT JOIN (
