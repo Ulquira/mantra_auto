@@ -117,9 +117,15 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
             if (!isNaN(num) && num > 0) { itemOrdenId = num; break; }
           }
         }
+        if (!itemOrdenId && fields.custom_20) {
+          const num = parseInt(String(fields.custom_20).trim(), 10);
+          if (!isNaN(num) && num > 0) { itemOrdenId = num; }
+        }
         if (!itemOrdenId && fields.custom_15) {
           const num = parseInt(String(fields.custom_15).trim(), 10);
-          if (!isNaN(num) && num > 0) { itemOrdenId = num; }
+          if (!isNaN(num) && num > 0 && !String(fields.custom_15).startsWith('VT') && !String(fields.custom_15).startsWith('GAR')) { 
+            itemOrdenId = num; 
+          }
         }
 
         let itemToken = null;
@@ -129,6 +135,9 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
             const val = String(fields[`custom_${i}`]).trim();
             if (val.length >= 20) { itemToken = val; break; }
           }
+        }
+        if (!itemToken && fields.custom_18 && String(fields.custom_18).trim().length >= 20) {
+          itemToken = String(fields.custom_18).trim();
         }
         if (!itemToken) {
           const custom9Val = fields.custom_9 ? String(fields.custom_9).trim() : null;
