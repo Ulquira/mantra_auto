@@ -29,7 +29,7 @@ function resolveCodigoPedido(item, cfg) {
   const fields = item.customFields || item;
 
   // 1. Buscar en las columnas configuradas si alguna es TICKET o DOCUMENTO
-  for (let i = 1; i <= 15; i++) {
+  for (let i = 1; i <= 20; i++) {
     const colName = `custom_${i}_campo`;
     if (cfg && (cfg[colName] === 'TICKET' || cfg[colName] === 'DOCUMENTO' || cfg[colName] === 'ORDENID' || cfg[colName] === 'ORDEN_ID' || cfg[colName] === 'ORDEN')) {
       const val = fields[`custom_${i}`];
@@ -110,7 +110,7 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
         const name = item.contactName || item.name || null;
 
         let itemOrdenId = null;
-        for (let i = 1; i <= 15; i++) {
+        for (let i = 1; i <= 20; i++) {
           const colName = `custom_${i}_campo`;
           if (cfg && (cfg[colName] === 'ORDEN' || cfg[colName] === 'ORDENID' || cfg[colName] === 'ORDEN_ID') && fields[`custom_${i}`]) {
             const num = parseInt(String(fields[`custom_${i}`]).trim(), 10);
@@ -123,7 +123,7 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
         }
 
         let itemToken = null;
-        for (let i = 1; i <= 15; i++) {
+        for (let i = 1; i <= 20; i++) {
           const colName = `custom_${i}_campo`;
           if (cfg && cfg[colName] === 'TOKEN' && fields[`custom_${i}`]) {
             const val = String(fields[`custom_${i}`]).trim();

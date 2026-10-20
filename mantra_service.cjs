@@ -327,8 +327,8 @@ function buildDynamicCustomData(orden, cfg, overrides = {}) {
     data.custom_9 = resolveVal(cfg.custom_9_campo, null);
   }
 
-  // Soporte extendido para custom_11 a custom_15 si están configurados
-  for (let i = 11; i <= 15; i++) {
+  // Soporte extendido para custom_11 a custom_20 si están configurados
+  for (let i = 11; i <= 20; i++) {
     const colName = `custom_${i}_campo`;
     if (cfg && cfg[colName]) {
       const val = resolveVal(cfg[colName], null);
