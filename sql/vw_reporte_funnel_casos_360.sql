@@ -2,7 +2,7 @@
 -- VISTA MAESTRA 360° DE CASOS, NOTIFICACIONES Y FUNNEL DE SEGUIMIENTO (TRACKING)
 -- Vista: vw_reporte_funnel_casos_360
 -- BD: BD_Phoenix
--- Cruce: vw_winordetraba + tiposervicio + REPORTE_PLANTILLAS_MANTRA + logs_traking + reprogramaciones + encuestas
+-- Cruce: vw_winordetraba + tiposervicio + LOG_NOTIFICACIONES_WSP + REPORTE_PLANTILLAS_MANTRA + logs_traking + reprogramaciones + encuestas
 -- =================================================================================
 
 CREATE OR REPLACE VIEW vw_reporte_funnel_casos_360 AS
@@ -26,14 +26,14 @@ SELECT
   t.token AS token_tracking,
   CONCAT('https://enruta.win.pe/seguimiento/', t.token) AS link_tracking,
   
-  -- 1. Notificación WhatsApp (Mantra)
+  -- 1. Notificación WhatsApp (Consolidado: Log de despacho en vivo + Reporte asíncrono Mantra)
   CASE 
-    WHEN m_ord.orden_id IS NOT NULL OR m_tok.token IS NOT NULL THEN 'SI' 
+    WHEN l.OrdenId IS NOT NULL OR m_ord.orden_id IS NOT NULL OR m_tok.token IS NOT NULL THEN 'SI' 
     ELSE 'NO' 
   END AS se_envio_wsp,
-  COALESCE(m_ord.fecha_envio_wsp, m_tok.fecha_envio_wsp) AS fecha_envio_wsp,
-  COALESCE(m_ord.estado_mensaje_wsp, m_tok.estado_mensaje_wsp, 'NO ENVIADO') AS estado_wsp,
-  COALESCE(m_ord.plantilla_wsp, m_tok.plantilla_wsp) AS plantilla_wsp,
+  COALESCE(m_ord.fecha_envio_wsp, m_tok.fecha_envio_wsp, l.fecha_envio_wsp) AS fecha_envio_wsp,
+  COALESCE(m_ord.estado_mensaje_wsp, m_tok.estado_mensaje_wsp, IF(l.OrdenId IS NOT NULL, 'SENT', 'NO ENVIADO')) AS estado_wsp,
+  COALESCE(m_ord.plantilla_wsp, m_tok.plantilla_wsp, l.estado_notificado) AS plantilla_wsp,
   COALESCE(m_ord.respuesta_boton_wsp, m_tok.respuesta_boton_wsp) AS respuesta_boton_wsp,
   
   -- 2. Interacciones en Plataforma Web Tracking (logs_traking)
@@ -83,7 +83,18 @@ FROM vw_winordetraba t
 -- Cruce con tiposervicio para segmentación operativa (Instalación, Averías, Provincia, etc.)
 LEFT JOIN tiposervicio ts ON t.Producto = ts.Servicio
 
--- Subconsulta Mantra indexada por orden_id
+-- Log transaccional directo de envíos en tiempo real (LOG_NOTIFICACIONES_WSP)
+LEFT JOIN (
+  SELECT 
+    OrdenId,
+    MAX(fecha_envio) AS fecha_envio_wsp,
+    SUBSTRING_INDEX(GROUP_CONCAT(EstadoNotificado ORDER BY fecha_envio DESC SEPARATOR '|'), '|', 1) AS estado_notificado
+  FROM LOG_NOTIFICACIONES_WSP
+  WHERE EnviadoExitosamente = 1
+  GROUP BY OrdenId
+) l ON t.OrdenId = l.OrdenId
+
+-- Subconsulta Mantra indexada por orden_id (para estados leídos/entregados y botones)
 LEFT JOIN (
   SELECT 
     orden_id,
