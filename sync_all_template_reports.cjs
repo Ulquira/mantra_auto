@@ -10,6 +10,16 @@ function parseSqlTimestamp(isoDateString) {
   return d.toISOString().slice(0, 19).replace('T', ' ');
 }
 
+function toPeruUtcIsoBounds(fromDateStr, toDateStr) {
+  const fromIso = (fromDateStr && fromDateStr.includes('T'))
+    ? fromDateStr
+    : new Date(`${fromDateStr}T00:00:00-05:00`).toISOString();
+  const toIso = (toDateStr && toDateStr.includes('T'))
+    ? toDateStr
+    : new Date(`${toDateStr}T23:59:59-05:00`).toISOString();
+  return { fromIso, toIso };
+}
+
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -56,7 +66,8 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
 
   console.log(`\n=================================================================================`);
   console.log(`📥 Sincronizando Reporte: [${tipo_servicio}] ${nombre_alias}`);
-  console.log(`   Template ID: ${template_id} | Rango: ${fromDate} al ${toDate}`);
+  const { fromIso, toIso } = toPeruUtcIsoBounds(fromDate, toDate);
+  console.log(`   Template ID: ${template_id} | Rango Perú: ${fromDate} al ${toDate} (API UTC: ${fromIso} - ${toIso})`);
   console.log(`=================================================================================`);
 
   let page = 1;
@@ -74,8 +85,8 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
         },
         body: JSON.stringify({
           templateId: template_id,
-          fromDate: fromDate,
-          toDate: toDate,
+          fromDate: fromIso,
+          toDate: toIso,
           page: page,
           limit: 100
         }),
@@ -162,6 +173,7 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
           item.agentName || null,
           item.sentBy || null,
           resolveCodigoPedido(item, cfg),
+          itemOrdenId,
           itemToken,
           parseSqlTimestamp(item.createdAt),
           parseSqlTimestamp(item.msgSentAt),
