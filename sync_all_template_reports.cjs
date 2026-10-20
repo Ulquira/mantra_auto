@@ -147,15 +147,33 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
             : (custom10Val && custom10Val.includes('/seguimiento/') ? custom10Val.split('/seguimiento/').pop().trim() : null);
         }
 
+        let itemPin = null;
+        for (let i = 1; i <= 20; i++) {
+          const colName = `custom_${i}_campo`;
+          if (cfg && (cfg[colName] === 'PIN' || cfg[colName] === 'PIN_TOKEN') && fields[`custom_${i}`]) {
+            const val = String(fields[`custom_${i}`]).trim();
+            if (val) { itemPin = val; break; }
+          }
+        }
+        if (!itemPin && fields.custom_17) {
+          itemPin = String(fields.custom_17).trim();
+        }
+        if (!itemPin && fields.custom_5 && String(fields.custom_5).trim().length <= 6 && /^\d+$/.test(String(fields.custom_5).trim())) {
+          itemPin = String(fields.custom_5).trim();
+        }
+
+        const rawCustomFieldsJson = fields ? JSON.stringify(fields) : null;
+
         await pool.query(`
           INSERT INTO REPORTE_PLANTILLAS_MANTRA (
             contacto_id, nombre, telefono, email,
             agente_asignado, enviado_por,
-            codigo_pedido, orden_id, token,
+            codigo_pedido, orden_id, token, pin,
             creado, fecha_envio, estado_mensaje, estado_chat,
             respuesta_boton, fecha_respuesta_boton, vendor_id,
-            template_id, grupo_servicio, nombre_plantilla_alias
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            template_id, grupo_servicio, nombre_plantilla_alias,
+            custom_fields_json
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON DUPLICATE KEY UPDATE
             nombre = VALUES(nombre),
             telefono = VALUES(telefono),
@@ -165,6 +183,7 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
             codigo_pedido = VALUES(codigo_pedido),
             orden_id = COALESCE(VALUES(orden_id), orden_id),
             token = COALESCE(VALUES(token), token),
+            pin = COALESCE(VALUES(pin), pin),
             creado = VALUES(creado),
             fecha_envio = VALUES(fecha_envio),
             estado_mensaje = VALUES(estado_mensaje),
@@ -173,7 +192,8 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
             fecha_respuesta_boton = VALUES(fecha_respuesta_boton),
             vendor_id = VALUES(vendor_id),
             grupo_servicio = VALUES(grupo_servicio),
-            nombre_plantilla_alias = VALUES(nombre_plantilla_alias);
+            nombre_plantilla_alias = VALUES(nombre_plantilla_alias),
+            custom_fields_json = COALESCE(VALUES(custom_fields_json), custom_fields_json);
         `, [
           item.contactId || item._id,
           name,
@@ -184,6 +204,7 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
           resolveCodigoPedido(item, cfg),
           itemOrdenId,
           itemToken,
+          itemPin,
           parseSqlTimestamp(item.createdAt),
           parseSqlTimestamp(item.msgSentAt),
           item.msgStatus || null,
@@ -193,7 +214,8 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
           item.vendorId || item.contactFlowResponseId || null,
           template_id,
           tipo_servicio,
-          nombre_alias
+          nombre_alias,
+          rawCustomFieldsJson
         ]);
 
         totalInserted++;
