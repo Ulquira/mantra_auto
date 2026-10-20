@@ -309,32 +309,20 @@ function buildDynamicCustomData(orden, cfg, overrides = {}) {
   const data = {
     name: firstName,
     phone: phone,
-    countryCode: "51",
-    custom_1: resolveVal(cfg.custom_1_campo, ticket),
-    custom_2: resolveVal(cfg.custom_2_campo, fecha),
-    custom_3: resolveVal(cfg.custom_3_campo, rangoHorario),
-    custom_4: resolveVal(cfg.custom_4_campo, direccion),
-    custom_5: resolveVal(cfg.custom_5_campo, trackingLink),
-    custom_6: resolveVal(cfg.custom_6_campo, plan),
-    custom_7: resolveVal(cfg.custom_7_campo, firstName),
-    custom_10: resolveVal(cfg.custom_10_campo, trackingLink)
+    countryCode: "51"
   };
 
-  if (cfg.custom_8_campo) {
-    data.custom_8 = resolveVal(cfg.custom_8_campo, null);
-  }
-  if (cfg.custom_9_campo) {
-    data.custom_9 = resolveVal(cfg.custom_9_campo, null);
-  }
-
-  // Soporte extendido para custom_11 a custom_20 si están configurados
-  for (let i = 11; i <= 20; i++) {
+  // Mapeo dinámico para custom_1 a custom_20 según configuración en DB
+  for (let i = 1; i <= 20; i++) {
     const colName = `custom_${i}_campo`;
     if (cfg && cfg[colName]) {
       const val = resolveVal(cfg[colName], null);
       if (val !== null && val !== undefined) {
         data[`custom_${i}`] = val;
       }
+    } else {
+      // Limpiar campos no configurados en Mantra
+      data[`custom_${i}`] = "";
     }
   }
 
