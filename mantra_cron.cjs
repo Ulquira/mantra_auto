@@ -19,13 +19,13 @@ async function runCron() {
     const horaActual = parseInt(formatter.format(new Date()), 10);
 
     let tramoFiltro = null;
-    if (horaActual >= 7 && horaActual <= 9) tramoFiltro = '08';
-    else if (horaActual >= 11 && horaActual <= 13) tramoFiltro = '12';
-    else if (horaActual >= 15 && horaActual <= 17) tramoFiltro = '16';
+    if (horaActual >= 7 && horaActual < 10) tramoFiltro = '08';
+    else if (horaActual >= 10 && horaActual < 14) tramoFiltro = '12';
+    else if (horaActual >= 14 && horaActual < 19) tramoFiltro = '16';
 
     // 1. Procesamiento de Nuevas Órdenes Agendadas / Pendientes / En camino del Tramo Activo (ESTRICTAMENTE AVERIAS)
     if (!tramoFiltro) {
-      console.log(`[CRON] Fuera de las ventanas de envío (07-09h, 11-13h, 15-17h). Hora actual: ${horaActual}h. No se procesan nuevos agendamientos.`);
+      console.log(`[CRON] Fuera de horario de envío (07:00 a 19:00). Hora actual: ${horaActual}h. No se procesan nuevos agendamientos.`);
     } else {
       console.log(`--- Procesando Órdenes de HOY del Tramo [${tramoFiltro}:00] (SOLO AVERIAS) ---`);
       const [rows] = await pool.query(`

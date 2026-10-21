@@ -706,9 +706,9 @@ async function runQueueCron() {
 
     // 2. Determinar el tramo objetivo basado en la hora actual (SOLO para AVERIAS)
     let tramoFiltro = null;
-    if (horaActual >= 7 && horaActual <= 9) tramoFiltro = '08';
-    else if (horaActual >= 11 && horaActual <= 13) tramoFiltro = '12';
-    else if (horaActual >= 15 && horaActual <= 17) tramoFiltro = '16';
+    if (horaActual >= 7 && horaActual < 10) tramoFiltro = '08';
+    else if (horaActual >= 10 && horaActual < 14) tramoFiltro = '12';
+    else if (horaActual >= 14 && horaActual < 19) tramoFiltro = '16';
 
     // Regla de horario para servicios continuos (INSTALACION, PROVINCIA, AVERIAS PRV y cualquier otro que tenga plantilla activa):
     // Funcionan de 7:00 AM a 7:00 PM (hora 7 a 18 inclusive) sin restricción de tramo ni ventanas

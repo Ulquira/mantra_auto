@@ -14,7 +14,7 @@ flowchart TD
         C["Cron Cola (Cada 30s)"] --> D["runQueueCron()"]
         D --> E{"Validar Horario (America/Lima)"}
         E -->|"7h a 19h Continuo"| F["Servicios Continuos (INSTALACION, PROVINCIA, etc.)"]
-        E -->|"Ventanas 07-09h, 11-13h, 15-17h"| G["AVERIAS (Tramos 08, 12, 16)"]
+        E -->|"Ventanas 07-09h, 10-13h, 14-18h"| G["AVERIAS (Tramos 08, 12, 16)"]
         
         F & G --> H["Cargar Tablas de Control (MySQL)"]
         H --> I["CONFIG_PLANTILLAS_MANTRA (Caché TTL 2m)"]
@@ -114,9 +114,9 @@ Define los sectores operativos donde se activa la plantilla `TRACKING` con geolo
 La evaluación temporal se realiza estrictamente en zona horaria de Perú (`America/Lima`):
 
 1. **Servicio AVERIAS:**
-   - **Tramo Mañana (08:00 - 12:00):** Se envía en la ventana de **07:00 a 09:00**.
-   - **Tramo Tarde (12:00 - 16:00):** Se envía en la ventana de **11:00 a 13:00**.
-   - **Tramo Noche (16:00 - 20:00):** Se envía en la ventana de **15:00 a 17:00**.
+   - **Tramo Mañana (08:00 - 12:00):** Despacho continuo de **07:00 a 09:59** (`07h - 09h`).
+   - **Tramo Tarde (12:00 - 16:00):** Despacho continuo de **10:00 a 13:59** (`10h - 13h`).
+   - **Tramo Noche (16:00 - 20:00):** Despacho continuo de **14:00 a 18:59** (`14h - 18h`).
    - *Fuera de esas ventanas, las órdenes de averías no se disparan.*
 
 2. **Servicios Continuos (INSTALACION, PROVINCIA, AVERIAS PRV y demás servicios activos):**
