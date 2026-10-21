@@ -126,7 +126,7 @@ La evaluación temporal se realiza estrictamente en zona horaria de Perú (`Amer
    - Detecta cambios en la tabla `reprogramaciones` y notifica con la fecha y turno solicitados por el cliente.
 
 4. **Asignación Automática de Asesor:**
-   - En instalaciones de Lima y Provincia, se utiliza el endpoint `/contacts/newbyuser` para enrutar la conversación al asesor correspondiente.
+   - En instalaciones (Lima: `jvieras@win.pe`, Provincia: `oolivares@win.pe`), averías regular Lima (`vibanez@win.pe`), y casos de **GARANTIA** o **REITERADO** en Lima (`Backofficepostventa@win.pe`), se utiliza el endpoint `/contacts/newbyuser` para enrutar la conversación al asesor correspondiente.
 
 ---
 

@@ -7,6 +7,7 @@ const URL_SEND_TEMPLATE = "https://wbpback2pro2.mantra.chat/contacts/send";
 const AGENT_EMAIL_INSTALACION_LIMA = process.env.AGENT_EMAIL_INSTALACION_LIMA || "jvieras@win.pe";
 const AGENT_EMAIL_INSTALACION_PROVINCIA = process.env.AGENT_EMAIL_INSTALACION_PROVINCIA || "oolivares@win.pe";
 const AGENT_EMAIL_AVERIAS_REGULAR_LIMA = process.env.AGENT_EMAIL_AVERIAS_REGULAR_LIMA || "vibanez@win.pe";
+const AGENT_EMAIL_POSTVENTA_LIMA = process.env.AGENT_EMAIL_POSTVENTA_LIMA || "Backofficepostventa@win.pe";
 const API_TIMEOUT_MS = parseInt(process.env.MANTRA_API_TIMEOUT_MS, 10) || 10000;
 
 // Configuración de credenciales de Mantra para retrocompatibilidad con scripts utilitarios
@@ -66,6 +67,19 @@ function resolveServiceType(orden, activeServices = []) {
     return activeServices.includes(tipo) ? tipo : null;
   }
   return tipo;
+}
+
+
+function isGarantiaOReiteradoLima(orden) {
+  if (!orden) return false;
+  const prod = String(orden.Producto || '').toUpperCase().trim();
+  const prov = String(orden.Provincia || '').toUpperCase().trim();
+  const reg = String(orden.Region || '').toUpperCase().trim();
+
+  const isGarantiaOReiterado = prod === 'GARANTIA' || prod === 'REITERADA' || prod === 'REITERADO';
+  const isLima = prov === 'LIMA' || prov === 'CALLAO' || reg.includes('LIMA') || reg.includes('CALLAO');
+
+  return isGarantiaOReiterado && isLima;
 }
 
 function isSectorPiloto(tipoServicio, sectorOperativo, sectoresList) {
@@ -440,10 +454,11 @@ async function sendMantraNotification(orden) {
   console.log(`[Control Dinámico] Servicio: ${tipoServicio} | Sector: ${sectorOperativo || 'N/A'} | Plantilla: ${cfg.nombre_alias} (${cfg.template_id}) | Piloto: ${enPiloto ? 'SI' : 'NO'}`);
   console.log(`=================================================`);
 
+  const isPostventaLima = isGarantiaOReiteradoLima(orden);
   const isInstalacionLima = tipoServicio === 'INSTALACION';
   const isInstalacionProvincia = tipoServicio === 'PROVINCIA';
-  const isAveriasRegularLima = tipoServicio === 'AVERIAS' && (cfg.tipo_plantilla === 'DEFAULT' || !enPiloto);
-  const requiresAgentAssignment = isInstalacionLima || isInstalacionProvincia || isAveriasRegularLima;
+  const isAveriasRegularLima = tipoServicio === 'AVERIAS' && !isPostventaLima && (cfg.tipo_plantilla === 'DEFAULT' || !enPiloto);
+  const requiresAgentAssignment = isInstalacionLima || isInstalacionProvincia || isAveriasRegularLima || isPostventaLima;
   const targetUrlContact = requiresAgentAssignment ? URL_CREATE_CONTACT_BY_USER : URL_CREATE_CONTACT;
 
   const contactPayload = {
@@ -452,7 +467,9 @@ async function sendMantraNotification(orden) {
     data: customData
   };
 
-  if (isInstalacionLima) {
+  if (isPostventaLima) {
+    contactPayload.userEmail = AGENT_EMAIL_POSTVENTA_LIMA;
+  } else if (isInstalacionLima) {
     contactPayload.userEmail = AGENT_EMAIL_INSTALACION_LIMA;
   } else if (isInstalacionProvincia) {
     contactPayload.userEmail = AGENT_EMAIL_INSTALACION_PROVINCIA;
@@ -566,9 +583,10 @@ async function sendReprogramacionNotification(reprog, orden) {
   console.log(`[Control Dinámico] Servicio: ${tipoServicio} | Plantilla: ${cfg.nombre_alias} (${cfg.template_id})`);
   console.log(`=================================================`);
 
+  const isPostventaLima = isGarantiaOReiteradoLima(orden);
   const isInstalacionLima = tipoServicio === 'INSTALACION';
   const isInstalacionProvincia = tipoServicio === 'PROVINCIA';
-  const requiresAgentAssignment = isInstalacionLima || isInstalacionProvincia;
+  const requiresAgentAssignment = isInstalacionLima || isInstalacionProvincia || isPostventaLima;
   const targetUrlContact = requiresAgentAssignment ? URL_CREATE_CONTACT_BY_USER : URL_CREATE_CONTACT;
 
   const contactPayload = {
@@ -577,7 +595,9 @@ async function sendReprogramacionNotification(reprog, orden) {
     data: customData
   };
 
-  if (isInstalacionLima) {
+  if (isPostventaLima) {
+    contactPayload.userEmail = AGENT_EMAIL_POSTVENTA_LIMA;
+  } else if (isInstalacionLima) {
     contactPayload.userEmail = AGENT_EMAIL_INSTALACION_LIMA;
   } else if (isInstalacionProvincia) {
     contactPayload.userEmail = AGENT_EMAIL_INSTALACION_PROVINCIA;
@@ -889,6 +909,7 @@ module.exports = {
   MANTRA_CONFIG,
   getControlTables,
   resolveServiceType,
+  isGarantiaOReiteradoLima,
   isSectorPiloto,
   ensureLogTableExists,
   sendMantraNotification,
