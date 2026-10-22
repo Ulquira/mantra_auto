@@ -9,7 +9,7 @@ function parseSqlTimestamp(isoDateString) {
 }
 
 async function syncSingleChat(candidate) {
-  const { phone, orden_id, ticket, grupo_servicio, fecha_gestion_dia, respuesta_boton, fecha_respuesta_boton } = candidate;
+  const { phone, orden_id, ticket, grupo_servicio, cliente_nombre, producto, tipo_trabajo, distrito, provincia, sector_operativo, fecha_gestion_dia, respuesta_boton, fecha_respuesta_boton } = candidate;
   const config = MANTRA_CONFIG[grupo_servicio] || MANTRA_CONFIG['Averias'];
   if (!config) return { success: false, error: 'Config missing' };
 
@@ -153,16 +153,24 @@ async function syncSingleChat(candidate) {
 
   const sqlUpsert = `
     INSERT INTO HISTORIAL_CHATS_MANTRA (
-      orden_id, ticket, phone, grupo_servicio, fecha_gestion_dia,
+      orden_id, ticket, phone, grupo_servicio,
+      cliente_nombre, producto, tipo_trabajo, distrito, provincia, sector_operativo,
+      fecha_gestion_dia,
       cliente_tipo_interaccion, cliente_boton_seleccionado, cliente_ultimo_texto, cliente_ultima_fecha,
       asesor_asignado, asesor_ultimo_texto, asesor_ultima_fecha,
       total_mensajes, ultimo_mensaje_emisor, ultimo_mensaje_texto, ultimo_mensaje_fecha,
       quien_tiene_la_palabra, estado_chat, tuvo_respuesta, tiempo_espera_minutos, semaforo_sla,
       ultimos_mensajes_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
       orden_id = COALESCE(VALUES(orden_id), orden_id),
       ticket = COALESCE(VALUES(ticket), ticket),
+      cliente_nombre = COALESCE(VALUES(cliente_nombre), cliente_nombre),
+      producto = COALESCE(VALUES(producto), producto),
+      tipo_trabajo = COALESCE(VALUES(tipo_trabajo), tipo_trabajo),
+      distrito = COALESCE(VALUES(distrito), distrito),
+      provincia = COALESCE(VALUES(provincia), provincia),
+      sector_operativo = COALESCE(VALUES(sector_operativo), sector_operativo),
       cliente_tipo_interaccion = VALUES(cliente_tipo_interaccion),
       cliente_boton_seleccionado = VALUES(cliente_boton_seleccionado),
       cliente_ultimo_texto = VALUES(cliente_ultimo_texto),
@@ -183,7 +191,9 @@ async function syncSingleChat(candidate) {
   `;
 
   await pool.query(sqlUpsert, [
-    orden_id || null, ticket || null, phone, grupo_servicio, fecha_gestion_dia,
+    orden_id || null, ticket || null, phone, grupo_servicio,
+    cliente_nombre || null, producto || null, tipo_trabajo || null, distrito || null, provincia || null, sector_operativo || null,
+    fecha_gestion_dia,
     clienteTipo, clienteBoton, clienteTexto, clienteFecha,
     asesorAsignado, asesorTexto, asesorFecha,
     totalMensajes, ultimoEmisor, ultimoTexto, ultimoFecha,
@@ -230,6 +240,12 @@ async function main() {
       t.orden_id,
       t.ticket,
       t.grupo_servicio,
+      t.cliente_nombre,
+      t.producto,
+      t.tipo_trabajo,
+      t.distrito,
+      t.provincia,
+      t.sector_operativo,
       t.fecha_gestion_dia,
       t.respuesta_boton,
       t.fecha_respuesta_boton,
@@ -243,6 +259,12 @@ async function main() {
           WHEN r.nombre_plantilla_alias LIKE '%Aver%' OR r.grupo_servicio LIKE '%Aver%' THEN 'Averias'
           ELSE 'Instalacion'
         END AS grupo_servicio,
+        ot.ClienteFinal AS cliente_nombre,
+        ot.Producto AS producto,
+        ot.TipoTraba AS tipo_trabajo,
+        COALESCE(NULLIF(TRIM(ot.Zona), ''), ot.Localidad) AS distrito,
+        ot.Provincia AS provincia,
+        ot.\`Sector Operativo\` AS sector_operativo,
         CAST(convert_tz(r.fecha_envio, '+00:00', '-05:00') AS DATE) AS fecha_gestion_dia,
         r.respuesta_boton,
         convert_tz(r.fecha_respuesta_boton, '+00:00', '-05:00') AS fecha_respuesta_boton,
