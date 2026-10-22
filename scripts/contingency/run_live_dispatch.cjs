@@ -74,7 +74,7 @@ async function runLiveDispatch() {
       AND (
         (ts.Tipo <> 'AVERIAS' AND ? = 1)
         OR
-        (ts.Tipo = 'AVERIAS' AND ? IS NOT NULL AND TIME(t.\`F.Soli\`) LIKE ?)
+        (ts.Tipo = 'AVERIAS' AND ? IS NOT NULL AND (TIME(t.\`F.Soli\`) LIKE '08%' OR TIME(t.\`F.Soli\`) LIKE '12%'))
       )
       AND NOT EXISTS (
         SELECT 1 FROM LOG_NOTIFICACIONES_WSP l
