@@ -746,14 +746,15 @@ async function runQueueCron() {
       DELETE c FROM COLA_NOTIFICACIONES_MANTRA c
       LEFT JOIN ${MAIN_TABLE} t ON c.ordenId = t.OrdenId
       LEFT JOIN TipoServicio ts ON t.Producto = ts.Servicio
-      LEFT JOIN LOG_NOTIFICACIONES_WSP l ON (
-        t.OrdenId = l.OrdenId
-        OR (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
-      ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
-      WHERE DATE(t.\`F.Soli\`) <> CURDATE() 
+      WHERE DATE(t.\`F.Soli\`) <> CURDATE()
          OR ts.Tipo NOT IN (${placeholders})
          OR ts.Tipo IS NULL
-         OR l.id IS NOT NULL
+         OR EXISTS (
+           SELECT 1 FROM LOG_NOTIFICACIONES_WSP l
+           WHERE l.OrdenId = t.OrdenId
+             AND DATE(l.fecha_envio) = CURDATE()
+             AND l.EnviadoExitosamente = 1
+         )
     `, activeServices);
 
     // 3. Extraer de la tabla principal SOLO los IDs que estén en la cola, sean de HOY y pertenezcan a servicios activos:
@@ -788,10 +789,6 @@ async function runQueueCron() {
       FROM COLA_NOTIFICACIONES_MANTRA c
       INNER JOIN ${MAIN_TABLE} t ON c.ordenId = t.OrdenId
       INNER JOIN TipoServicio ts ON t.Producto = ts.Servicio
-      LEFT JOIN LOG_NOTIFICACIONES_WSP l ON (
-        t.OrdenId = l.OrdenId
-        OR (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
-      ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
       WHERE ts.Tipo IN (${placeholders})
         AND t.Estado IN ('Agendada', 'Pendiente', 'En camino')
         AND DATE(t.\`F.Soli\`) = CURDATE() 
@@ -800,7 +797,12 @@ async function runQueueCron() {
           OR
           (ts.Tipo = 'AVERIAS' AND ? IS NOT NULL AND TIME(t.\`F.Soli\`) LIKE ?)
         )
-        AND l.id IS NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM LOG_NOTIFICACIONES_WSP l
+          WHERE l.OrdenId = t.OrdenId
+            AND DATE(l.fecha_envio) = CURDATE()
+            AND l.EnviadoExitosamente = 1
+        )
       GROUP BY 
         t.OrdenId,
         t.Producto,

@@ -68,10 +68,6 @@ async function runLiveDispatch() {
       MAX(ts.Tipo) as CategoriaServicioMantra
     FROM ${MAIN_TABLE} t
     INNER JOIN TipoServicio ts ON t.Producto = ts.Servicio
-    LEFT JOIN LOG_NOTIFICACIONES_WSP l ON (
-      t.OrdenId = l.OrdenId
-      OR (t.CodiSegui IS NOT NULL AND t.CodiSegui <> '' AND l.CodiSegui = t.CodiSegui)
-    ) AND DATE(l.fecha_envio) = CURDATE() AND l.EnviadoExitosamente = 1
     WHERE ts.Tipo IN (${placeholders})
       AND t.Estado IN ('Agendada', 'Pendiente', 'En camino')
       AND DATE(t.\`F.Soli\`) = CURDATE() 
@@ -80,7 +76,12 @@ async function runLiveDispatch() {
         OR
         (ts.Tipo = 'AVERIAS' AND ? IS NOT NULL AND TIME(t.\`F.Soli\`) LIKE ?)
       )
-      AND l.id IS NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM LOG_NOTIFICACIONES_WSP l
+        WHERE l.OrdenId = t.OrdenId
+          AND DATE(l.fecha_envio) = CURDATE()
+          AND l.EnviadoExitosamente = 1
+      )
     GROUP BY 
       t.OrdenId,
       t.Producto,
