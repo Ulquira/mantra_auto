@@ -454,11 +454,11 @@ async function sendMantraNotification(orden) {
   console.log(`[Control Dinámico] Servicio: ${tipoServicio} | Sector: ${sectorOperativo || 'N/A'} | Plantilla: ${cfg.nombre_alias} (${cfg.template_id}) | Piloto: ${enPiloto ? 'SI' : 'NO'}`);
   console.log(`=================================================`);
 
-  const isPostventaLima = isGarantiaOReiteradoLima(orden);
+  const isPostventa = tipoServicio === 'POSTVENTA' || isGarantiaOReiteradoLima(orden);
   const isInstalacionLima = tipoServicio === 'INSTALACION';
   const isInstalacionProvincia = tipoServicio === 'PROVINCIA';
-  const isAveriasRegularLima = tipoServicio === 'AVERIAS' && !isPostventaLima && (cfg.tipo_plantilla === 'DEFAULT' || !enPiloto);
-  const requiresAgentAssignment = isInstalacionLima || isInstalacionProvincia || isAveriasRegularLima || isPostventaLima;
+  const isAveriasRegularLima = tipoServicio === 'AVERIAS' && !isPostventa && (cfg.tipo_plantilla === 'DEFAULT' || !enPiloto);
+  const requiresAgentAssignment = isInstalacionLima || isInstalacionProvincia || isAveriasRegularLima || isPostventa;
   const targetUrlContact = requiresAgentAssignment ? URL_CREATE_CONTACT_BY_USER : URL_CREATE_CONTACT;
 
   const contactPayload = {
@@ -467,7 +467,7 @@ async function sendMantraNotification(orden) {
     data: customData
   };
 
-  if (isPostventaLima) {
+  if (isPostventa) {
     contactPayload.userEmail = AGENT_EMAIL_POSTVENTA_LIMA;
   } else if (isInstalacionLima) {
     contactPayload.userEmail = AGENT_EMAIL_INSTALACION_LIMA;
@@ -478,11 +478,13 @@ async function sendMantraNotification(orden) {
   }
 
   try {
-    const assignedAgentLog = isInstalacionLima 
-      ? ` (Asignando a ${AGENT_EMAIL_INSTALACION_LIMA})` 
-      : (isInstalacionProvincia 
-          ? ` (Asignando a ${AGENT_EMAIL_INSTALACION_PROVINCIA})` 
-          : (isAveriasRegularLima ? ` (Asignando a ${AGENT_EMAIL_AVERIAS_REGULAR_LIMA})` : ''));
+    const assignedAgentLog = isPostventa
+      ? ` (Asignando a ${AGENT_EMAIL_POSTVENTA_LIMA})`
+      : (isInstalacionLima 
+          ? ` (Asignando a ${AGENT_EMAIL_INSTALACION_LIMA})` 
+          : (isInstalacionProvincia 
+              ? ` (Asignando a ${AGENT_EMAIL_INSTALACION_PROVINCIA})` 
+              : (isAveriasRegularLima ? ` (Asignando a ${AGENT_EMAIL_AVERIAS_REGULAR_LIMA})` : '')));
     console.log(`1. Enviando petición para crear/actualizar contacto con variables dinámicas...${assignedAgentLog}`);
     const resContact = await fetch(targetUrlContact, {
       method: 'POST',
@@ -583,10 +585,10 @@ async function sendReprogramacionNotification(reprog, orden) {
   console.log(`[Control Dinámico] Servicio: ${tipoServicio} | Plantilla: ${cfg.nombre_alias} (${cfg.template_id})`);
   console.log(`=================================================`);
 
-  const isPostventaLima = isGarantiaOReiteradoLima(orden);
+  const isPostventa = tipoServicio === 'POSTVENTA' || isGarantiaOReiteradoLima(orden);
   const isInstalacionLima = tipoServicio === 'INSTALACION';
   const isInstalacionProvincia = tipoServicio === 'PROVINCIA';
-  const requiresAgentAssignment = isInstalacionLima || isInstalacionProvincia || isPostventaLima;
+  const requiresAgentAssignment = isInstalacionLima || isInstalacionProvincia || isPostventa;
   const targetUrlContact = requiresAgentAssignment ? URL_CREATE_CONTACT_BY_USER : URL_CREATE_CONTACT;
 
   const contactPayload = {
@@ -595,7 +597,7 @@ async function sendReprogramacionNotification(reprog, orden) {
     data: customData
   };
 
-  if (isPostventaLima) {
+  if (isPostventa) {
     contactPayload.userEmail = AGENT_EMAIL_POSTVENTA_LIMA;
   } else if (isInstalacionLima) {
     contactPayload.userEmail = AGENT_EMAIL_INSTALACION_LIMA;
@@ -604,9 +606,11 @@ async function sendReprogramacionNotification(reprog, orden) {
   }
 
   try {
-    const assignedAgentLog = isInstalacionLima 
-      ? ` (Asignando a ${AGENT_EMAIL_INSTALACION_LIMA})` 
-      : (isInstalacionProvincia ? ` (Asignando a ${AGENT_EMAIL_INSTALACION_PROVINCIA})` : '');
+    const assignedAgentLog = isPostventa
+      ? ` (Asignando a ${AGENT_EMAIL_POSTVENTA_LIMA})`
+      : (isInstalacionLima 
+          ? ` (Asignando a ${AGENT_EMAIL_INSTALACION_LIMA})` 
+          : (isInstalacionProvincia ? ` (Asignando a ${AGENT_EMAIL_INSTALACION_PROVINCIA})` : ''));
     console.log(`1. Enviando petición para crear/actualizar contacto (Reprogramación)...${assignedAgentLog}`);
     const resContact = await fetch(targetUrlContact, {
       method: 'POST',
