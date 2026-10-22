@@ -16,6 +16,7 @@ SELECT
   cliente_nombre AS cliente,
   producto AS producto_servicio,
   tipo_trabajo,
+  motivo_trabajo,
   distrito AS distrito_zona,
   provincia,
   sector_operativo,
