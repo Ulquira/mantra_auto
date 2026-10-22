@@ -51,7 +51,7 @@ async function syncSingleChat(candidate) {
         countryCode: '51',
         phone: phone,
         page: 1,
-        limit: 10
+        limit: 15
       }),
       signal: AbortSignal.timeout(6000)
     });
@@ -143,7 +143,7 @@ async function syncSingleChat(candidate) {
     tuvoRespuesta = 0;
   }
 
-  const ultimos5 = messages.slice(0, 5).map((m, idx) => ({
+  const ultimos5 = messages.slice(0, 15).map((m, idx) => ({
     orden: idx + 1,
     emisor: m.sender === 'contact' ? 'CLIENTE' : 'ASESOR/EMPRESA',
     texto: m.content?.text || `[${m.content?.type || 'mensaje'}]`,
