@@ -199,8 +199,9 @@ async function runBatch(candidates, configs, concurrency = BATCH_CONCURRENCY) {
   return { completed, failed };
 }
 
-async function main() {
-  console.log('[Historial Mantra] Iniciando sincronización de chats de los últimos 5 días.');
+async function main(options = {}) {
+  const forceAll = options.forceAll === true;
+  console.log(`[Historial Mantra] Iniciando sincronización de chats de HOY (modo: ${forceAll ? 'completo' : 'incremental'}).`);
   const { configs } = await getControlTables(true);
 
   const [candidates] = await pool.query(`
@@ -258,13 +259,25 @@ async function main() {
       FROM REPORTE_PLANTILLAS_MANTRA r
       LEFT JOIN vw_winordetraba ot ON r.orden_id = ot.OrdenId
       LEFT JOIN tiposervicio ts ON ot.Producto = ts.Servicio
-      WHERE r.fecha_envio >= DATE_SUB(CURDATE(), INTERVAL 5 DAY)
+      WHERE DATE(r.fecha_envio) = CURDATE()
         AND r.telefono IS NOT NULL
         AND r.telefono <> ''
         AND (
-          r.respuesta_boton IS NOT NULL
-          OR r.estado_chat IN ('En proceso', 'Pendiente')
-          OR r.fecha_envio >= DATE_SUB(CURDATE(), INTERVAL 2 DAY)
+          ${forceAll ? "1 = 1" : "1 = 0"}
+          OR r.respuesta_boton IS NOT NULL
+          OR r.estado_chat = 'En proceso'
+          OR r.fecha_envio >= DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+          OR NOT EXISTS (
+            SELECT 1 FROM HISTORIAL_CHATS_MANTRA h
+            WHERE h.phone = r.telefono
+              AND h.fecha_gestion_dia = CURDATE()
+          )
+          OR EXISTS (
+            SELECT 1 FROM HISTORIAL_CHATS_MANTRA h
+            WHERE h.phone = r.telefono
+              AND h.fecha_gestion_dia = CURDATE()
+              AND h.quien_tiene_la_palabra = 'CLIENTE'
+          )
         )
     ) AS candidates
     WHERE candidates.rn = 1
@@ -302,13 +315,14 @@ async function main() {
 
 let isSyncRunning = false;
 
-async function syncChatHistory() {
+async function syncChatHistory(options = {}) {
   if (isSyncRunning) {
-    throw new Error('Ya hay una sincronización de historial activa en esta instancia.');
+    console.warn('[Historial Mantra] Sincronización anterior aún en curso; se omite esta ejecución.');
+    return { completed: 0, failed: 0, skipped: true };
   }
   isSyncRunning = true;
   try {
-    return await main();
+    return await main(options);
   } finally {
     isSyncRunning = false;
   }

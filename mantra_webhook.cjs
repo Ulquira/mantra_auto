@@ -47,6 +47,25 @@ cron.schedule('0 8-18/2 * * *', async () => {
 });
 console.log(`⏰ Cron [Reportes + Historial Mantra] programado cada 2 horas entre 08:00 y 18:00 (America/Lima).`);
 
+// Cron Ligero de Sincronización de Historial de Chats (Cada 5 minutos de 08:00 a 19:00 hora Perú)
+let isChatSyncRunning = false;
+cron.schedule('*/5 8-19 * * *', async () => {
+  if (isChatSyncRunning || isMantraSyncRunning) {
+    return;
+  }
+  isChatSyncRunning = true;
+  try {
+    await syncChatHistory();
+  } catch (err) {
+    console.error(`❌ [Historial Mantra 5m] Error:`, err.message);
+  } finally {
+    isChatSyncRunning = false;
+  }
+}, {
+  timezone: 'America/Lima'
+});
+console.log(`⏰ Cron [Historial Chats 5m] programado cada 5 minutos entre 08:00 y 19:00 (America/Lima).`);
+
 // Endpoint Webhook para recibir notificaciones por evento/cambio de estado
 app.post('/webhook/estado-cambiado', async (req, res) => {
   const { ordenId, estado } = req.body;
