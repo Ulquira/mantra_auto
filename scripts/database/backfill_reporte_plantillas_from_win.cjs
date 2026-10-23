@@ -2,40 +2,24 @@ const { pool } = require('../../mantra_service.cjs');
 
 (async () => {
   try {
-    console.log("=== EJECUTANDO BACKFILL DE CAMPOS FALTANTES ===");
+    console.log("=== EJECUTANDO BACKFILL DE CAMPOS FALTANTES DESDE VISTA ENRIQUECIDA ===");
 
-    // 1. Cruce por token
-    console.log("1. Cruce por token...");
-    const [resToken] = await pool.query(`
+    // 1. Cruce multi-nivel aprovechando la vista enriquecida (token, CodiSegui, Documento, Teléfono+Fecha)
+    console.log("1. Poblando orden_id y nombre desde vw_reporte_mantra_enriquecido...");
+    await pool.query("SET SESSION group_concat_max_len = 1048576;");
+    const [res] = await pool.query(`
       UPDATE reporte_plantillas_mantra r
-      JOIN vw_winordetraba w ON r.token IS NOT NULL AND r.token != '' AND r.token = w.token
+      JOIN vw_reporte_mantra_enriquecido v ON r.id = v.reporte_id
       SET 
-        r.orden_id = COALESCE(r.orden_id, w.OrdenId),
-        r.nombre = COALESCE(NULLIF(TRIM(r.nombre), ''), w.ClienteFinal)
-      WHERE (r.orden_id IS NULL OR r.nombre IS NULL OR TRIM(r.nombre) = '')
+        r.orden_id = v.orden_id,
+        r.nombre = COALESCE(NULLIF(TRIM(r.nombre), ''), v.cliente_bd)
+      WHERE (r.orden_id IS NULL OR r.orden_id = 0 OR r.nombre IS NULL OR TRIM(r.nombre) = '')
+        AND v.orden_id IS NOT NULL
     `);
-    console.log(`   ✔ Filas actualizadas por token: ${resToken.affectedRows}`);
+    console.log(`   ✔ Filas físicas actualizadas: ${res.affectedRows}`);
 
-    // 2. Cruce por CodiSegui numérico
-    console.log("2. Cruce por CodiSegui...");
-    const [resCod] = await pool.query(`
-      UPDATE reporte_plantillas_mantra r
-      JOIN (
-        SELECT CodiSegui, MAX(OrdenId) as OrdenId, MAX(ClienteFinal) as ClienteFinal
-        FROM vw_winordetraba
-        WHERE CodiSegui IS NOT NULL AND CodiSegui != ''
-        GROUP BY CodiSegui
-      ) w ON r.codigo_pedido = w.CodiSegui
-      SET 
-        r.orden_id = COALESCE(r.orden_id, w.OrdenId),
-        r.nombre = COALESCE(NULLIF(TRIM(r.nombre), ''), w.ClienteFinal)
-      WHERE (r.orden_id IS NULL OR r.nombre IS NULL OR TRIM(r.nombre) = '')
-        AND r.codigo_pedido REGEXP '^[0-9]+$'
-    `);
-    console.log(`   ✔ Filas actualizadas por CodiSegui: ${resCod.affectedRows}`);
-
-    // 3. Auditoría post-proceso
-    console.log("\n=== ESTADO POST-PROCESAMIENTO (ÚLTIMOS 3 DÍAS) ===");
+    // 2. Auditoría post-proceso en tabla física
+    console.log("\n=== ESTADO EN TABLA FÍSICA (REPORTE_PLANTILLAS_MANTRA) ===");
     const [postAudit] = await pool.query(`
       SELECT 
         DATE_FORMAT(CONVERT_TZ(fecha_envio, '+00:00', '-05:00'), '%Y-%m-%d') as dia_lima,
