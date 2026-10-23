@@ -5,6 +5,8 @@ const cron = require('node-cron');
 const { processOrderById, runQueueCron } = require('./mantra_service.cjs');
 const { runCron } = require('./mantra_cron.cjs');
 const { syncAllTemplates } = require('./sync_all_template_reports.cjs');
+const { syncChatHistory } = require('./scripts/sync_chat_history_v2.cjs');
+const { getDateInTimeZone } = require('./scripts/date_utils.cjs');
 require('dotenv').config();
 
 const app = express();
@@ -19,23 +21,31 @@ cron.schedule('*/30 * * * * *', async () => {
 console.log(`⏰ Cron [Cola Eventos + Reprogramaciones] activado. Escaneando la cola cada 30 segundos...`);
 
 // Cron Periódico de Sincronización de Reportes de Mantra (Cada 2 horas entre 8:00 AM y 6:00 PM hora Perú)
+let isMantraSyncRunning = false;
 cron.schedule('0 8-18/2 * * *', async () => {
+  if (isMantraSyncRunning) {
+    console.warn('[Mantra] Sincronización anterior aún en curso; se omite esta ejecución.');
+    return;
+  }
+  isMantraSyncRunning = true;
   console.log(`⏰ [Reporte Mantra] Iniciando sincronización periódica de reportes de plantillas de Mantra...`);
   try {
-    const hoy = new Date().toISOString().slice(0, 10);
-    // Sincronizar los últimos 2 días y el día de hoy para consolidar métricas y absorber desfases horarios
-    const d = new Date();
+    const hoy = getDateInTimeZone(new Date(), 'America/Lima');
+    const d = new Date(`${hoy}T12:00:00-05:00`);
     d.setDate(d.getDate() - 2);
-    const haceDosDias = d.toISOString().slice(0, 10);
+    const haceDosDias = getDateInTimeZone(d, 'America/Lima');
     await syncAllTemplates(haceDosDias, hoy);
-    console.log(`✅ [Reporte Mantra] Sincronización periódica de reportes completada.`);
+    await syncChatHistory();
+    console.log(`✅ [Mantra] Sincronización de reportes e historial completada.`);
   } catch (err) {
-    console.error(`❌ Error en cron periódico de reportes:`, err.message);
+    console.error(`❌ Error en cron de reportes/historial Mantra:`, err.message);
+  } finally {
+    isMantraSyncRunning = false;
   }
 }, {
   timezone: 'America/Lima'
 });
-console.log(`⏰ Cron [Reporte Mantra] programado cada 2 horas entre 08:00 y 18:00 (America/Lima).`);
+console.log(`⏰ Cron [Reportes + Historial Mantra] programado cada 2 horas entre 08:00 y 18:00 (America/Lima).`);
 
 // Endpoint Webhook para recibir notificaciones por evento/cambio de estado
 app.post('/webhook/estado-cambiado', async (req, res) => {

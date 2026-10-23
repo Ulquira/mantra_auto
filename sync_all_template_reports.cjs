@@ -1,5 +1,7 @@
 require('dotenv').config();
 const { pool, getControlTables } = require('./mantra_service.cjs');
+const { extractContactPhone } = require('./scripts/mantra_report_helpers.cjs');
+const { getDateInTimeZone } = require('./scripts/date_utils.cjs');
 
 const URL_TEMPLATE_REPORT = "https://wbpback2pro2.mantra.chat/report/template/messages/ext";
 
@@ -61,7 +63,7 @@ function resolveCodigoPedido(item, cfg) {
 async function syncTemplateReport(cfg, fromDate, toDate) {
   const { api_key, group_id, template_id, nombre_alias, tipo_servicio } = cfg;
   if (!api_key || !group_id || !template_id) {
-    return { error: `Configuración no válida para ${nombre_alias}` };
+    throw new Error(`Configuración incompleta para la plantilla ${nombre_alias}.`);
   }
 
   console.log(`\n=================================================================================`);
@@ -72,6 +74,7 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
 
   let page = 1;
   let totalInserted = 0;
+  let skippedWithoutPhone = 0;
   let hasMore = true;
 
   while (hasMore) {
@@ -93,8 +96,17 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
         signal: AbortSignal.timeout(15000)
       });
 
+      if (!res.ok) {
+        throw new Error(`Mantra report devolvió HTTP ${res.status}.`);
+      }
       const json = await res.json();
-      if (!json.data || json.data.length === 0) {
+      if (json?.ok === false || json?.success === false) {
+        throw new Error('Mantra report rechazó la consulta.');
+      }
+      if (!json || typeof json !== 'object' || !Array.isArray(json.data)) {
+        throw new Error('Mantra report devolvió una respuesta sin una lista de datos válida.');
+      }
+      if (json.data.length === 0) {
         console.log(`   Página ${page}: Sin más registros.`);
         break;
       }
@@ -105,8 +117,11 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
       for (const item of rows) {
         // Soporte híbrido para nueva estructura anidada o antigua plana
         const fields = item.customFields || item;
-        const rawPhone = item.contactPhone || item.phone || '';
-        const cleanPhone = rawPhone ? String(rawPhone).replace(/\D/g, '').slice(-9) : '';
+        const cleanPhone = extractContactPhone(item);
+        if (!cleanPhone) {
+          skippedWithoutPhone++;
+          continue;
+        }
         const name = item.contactName || item.name || null;
 
         let itemOrdenId = null;
@@ -229,19 +244,22 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
       }
     } catch (err) {
       console.error(`   ❌ Error en página ${page}:`, err.message);
-      hasMore = false;
+      throw new Error(`Falló la página ${page} de ${nombre_alias}: ${err.message}`);
     }
   }
 
+  if (skippedWithoutPhone > 0) {
+    console.warn(`⚠️ [${nombre_alias}] Se omitieron ${skippedWithoutPhone} registros sin un teléfono válido.`);
+  }
   console.log(`✅ [${nombre_alias}] Finalizado: ${totalInserted} registros sincronizados en MySQL.`);
-  return { alias: nombre_alias, totalInserted };
+  return { alias: nombre_alias, totalInserted, skippedWithoutPhone };
 }
 
 /**
  * Sincroniza todas las plantillas activas de la tabla dinámica
  */
 async function syncAllTemplates(fromDate, toDate) {
-  const hoy = new Date().toISOString().slice(0, 10);
+  const hoy = getDateInTimeZone(new Date(), 'America/Lima');
   const from = fromDate || hoy;
   const to = toDate || hoy;
 
@@ -252,18 +270,36 @@ async function syncAllTemplates(fromDate, toDate) {
 
   const { configs } = await getControlTables(true);
   const activeConfigs = (configs || []).filter(c => c.activo === 1 && c.api_key && c.template_id);
+  if (activeConfigs.length === 0) {
+    throw new Error('No hay plantillas activas y configuradas para sincronizar.');
+  }
 
   const results = [];
+  const errors = [];
   for (const cfg of activeConfigs) {
-    const res = await syncTemplateReport(cfg, from, to);
-    results.push(res);
+    try {
+      results.push(await syncTemplateReport(cfg, from, to));
+    } catch (err) {
+      errors.push(err);
+      results.push({ alias: cfg.nombre_alias, error: err.message });
+    }
     await sleep(500);
   }
 
   console.log(`\n=================================================================================`);
-  console.log(`🏁 SINCRONIZACIÓN GENERAL FINALIZADA CON ÉXITO`);
+  console.log(`🏁 SINCRONIZACIÓN GENERAL FINALIZADA`);
   console.table(results);
   console.log(`=================================================================================`);
+  const skippedWithoutPhone = results.reduce(
+    (total, result) => total + (result.skippedWithoutPhone || 0),
+    0
+  );
+  if (skippedWithoutPhone > 0) {
+    console.warn(`⚠️ Se omitieron ${skippedWithoutPhone} registros sin teléfono válido; revisar el formato devuelto por Mantra.`);
+  }
+  if (errors.length > 0) {
+    throw new Error(`Falló la sincronización de ${errors.length} de ${activeConfigs.length} plantillas.`);
+  }
   return results;
 }
 
@@ -275,10 +311,10 @@ module.exports = {
 // Si se ejecuta directamente desde la terminal
 if (require.main === module) {
   const args = process.argv.slice(2);
-  const d = new Date();
-  d.setDate(d.getDate() - 2);
+  const hoy = getDateInTimeZone(new Date(), 'America/Lima');
+  const d = new Date(`${hoy}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 2);
   const defaultFrom = d.toISOString().slice(0, 10);
-  const hoy = new Date().toISOString().slice(0, 10);
   const fromDate = args[0] || defaultFrom;
   const toDate = args[1] || hoy;
 

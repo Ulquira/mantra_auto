@@ -147,6 +147,8 @@ El script [sync_all_template_reports.cjs](file:///c:/Users/tonny/OneDrive%20-%20
 * Clics y respuestas de botones rápidos (`respuesta_boton`, `fecha_respuesta_boton`).
 * Código de pedido / ticket asociado para cruce con PowerBI.
 
+Después de sincronizar los reportes, el mismo cron actualiza `HISTORIAL_CHATS_MANTRA` consultando `contacts/byphone` y `contacts/chats/historial`. La importación normaliza el teléfono desde los campos de contacto admitidos y contabiliza los registros que llegan sin teléfono; estos se omiten porque no se puede consultar su chat. Si falla la consulta de historial, ese chat no se sobrescribe y el cron registra el fallo para reintentar en el siguiente ciclo. La fecha de gestión se calcula en la zona horaria de la sesión MySQL (`America/Lima`).
+
 ---
 
 ## 🚀 Comandos de Ejecución y Auditoría
@@ -163,4 +165,10 @@ npm run audit:deep
 
 # Ejecutar manualmente escaneo batch
 npm run cron
+
+# Sincronizar manualmente el historial de chats (requiere DB y credenciales de plantillas)
+npm run sync:chat-history
+
+# Ejecutar pruebas unitarias del cálculo de SLA e historial
+npm test
 ```

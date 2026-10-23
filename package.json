@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node mantra_webhook.cjs",
     "cron": "node mantra_cron.cjs",
+    "test": "node --test scripts/tests/unit/chat_history_sync.test.cjs",
+    "sync:chat-history": "node scripts/sync_chat_history_v2.cjs",
     "setup-test": "node scripts/tests/setup_test_mantra.cjs",
     "audit:today": "node scripts/audit/audit_today.cjs",
     "audit:deep": "node scripts/audit/deep_audit.cjs"

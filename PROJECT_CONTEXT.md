@@ -4,7 +4,7 @@ Ficha de referencia para futuras consultas. Revisada el 2026-10-23. Describe el 
 
 ## Propósito y tecnología
 
-API Node.js para automatizar notificaciones de WhatsApp mediante Mantra Chat, conectada a MySQL/Phoenix. CommonJS (`.cjs`), Express 5, `mysql2/promise`, `node-cron` y `dotenv`. No hay una suite unitaria estándar configurada en `package.json`; `scripts/tests/` contiene pruebas y herramientas operativas que pueden depender de la base de datos o servicios externos.
+API Node.js para automatizar notificaciones de WhatsApp mediante Mantra Chat, conectada a MySQL/Phoenix. CommonJS (`.cjs`), Express 5, `mysql2/promise`, `node-cron` y `dotenv`. `npm test` ejecuta pruebas unitarias del cálculo de SLA del historial; `scripts/tests/` también contiene herramientas operativas que pueden depender de la base de datos o servicios externos.
 
 ## Flujo principal
 
@@ -12,14 +12,17 @@ API Node.js para automatizar notificaciones de WhatsApp mediante Mantra Chat, co
 2. [mantra_service.cjs](./mantra_service.cjs) contiene la lógica central: pool MySQL, lectura con caché de reglas (`CONFIG_PLANTILLAS_MANTRA` y `SECTORES_PILOTO_TRACKING`), composición de variables, deduplicación y llamadas a Mantra.
 3. [mantra_cron.cjs](./mantra_cron.cjs) es un escáner batch invocable manualmente; procesa averías por ventanas horarias y reprogramaciones.
 4. `runQueueCron()` consume `COLA_NOTIFICACIONES_MANTRA`, aplica ventanas/horarios y despacha órdenes elegibles.
-5. [sync_all_template_reports.cjs](./sync_all_template_reports.cjs) pagina reportes de Mantra y hace upsert en `REPORTE_PLANTILLAS_MANTRA`.
-6. `scripts/database/` contiene scripts de instalación/evolución de tablas, vistas, triggers e índices; `scripts/audit/`, `scripts/contingency/` y `scripts/tests/` contienen utilidades operativas.
+5. [sync_all_template_reports.cjs](./sync_all_template_reports.cjs) pagina reportes de Mantra y hace upsert en `REPORTE_PLANTILLAS_MANTRA`; ahora propaga fallos de API por plantilla.
+6. [scripts/sync_chat_history_v2.cjs](./scripts/sync_chat_history_v2.cjs) sincroniza `HISTORIAL_CHATS_MANTRA` después de los reportes en el cron de dos horas y se puede ejecutar con `npm run sync:chat-history`. Consulta credenciales por `template_id`, evita sobrescribir un chat si falla su endpoint de historial y comunica fallos para reintento.
+7. [scripts/mantra_report_helpers.cjs](./scripts/mantra_report_helpers.cjs) normaliza el teléfono de los formatos documentados/admitidos en respuestas de reportes; registros sin teléfono se contabilizan y omiten.
+8. `scripts/database/` contiene scripts de instalación/evolución de tablas, vistas, triggers e índices; `scripts/audit/`, `scripts/contingency/` y `scripts/tests/` contienen utilidades operativas.
 
 ## Reglas operativas documentadas
 
 - Zona horaria de negocio: `America/Lima`; servicios continuos operan de 07:00 a 19:00. AVERIAS se agrupa en tramos 08, 12 y 16, con ventanas de despacho asociadas.
 - Las plantillas y sus campos se configuran dinámicamente en MySQL; el modo TRACKING depende de sectores piloto.
 - La cola tiene un índice único configurado por `scripts/database/setup_db_dedup_constraint.cjs`. La deduplicación de envíos consulta `LOG_NOTIFICACIONES_WSP`.
+- La tabla de historial usa unicidad por `(phone, grupo_servicio, fecha_gestion_dia)`; la sincronización calcula el día en la sesión MySQL configurada a `-05:00`.
 - La documentación funcional está en [README.md](./README.md); los manuales de API están en `docs/`.
 
 ## Configuración y datos
@@ -42,5 +45,7 @@ API Node.js para automatizar notificaciones de WhatsApp mediante Mantra Chat, co
 
 - `npm start`: servidor, webhooks y tareas programadas.
 - `npm run cron`: escaneo batch manual.
+- `npm run sync:chat-history`: sincronización manual del historial desde Mantra.
+- `npm test`: pruebas unitarias del cálculo del historial/SLA.
 - `npm run audit:today` / `npm run audit:deep`: auditorías operativas.
 - No ejecutar scripts de envío o base de datos contra producción sin validar su alcance y dependencias.
