@@ -6,6 +6,10 @@ const {
 } = require('../../chat_history_metrics.cjs');
 const {
   extractContactPhone,
+  extractOrderId,
+  extractTemplateFields,
+  extractTicket,
+  resolveConfiguredCustomValue,
   resolveTemplateConfig
 } = require('../../mantra_report_helpers.cjs');
 const { getDateInTimeZone } = require('../../date_utils.cjs');
@@ -27,6 +31,57 @@ test('extracts and normalizes the contact phone from supported report shapes', (
 test('rejects missing or invalid contact phones', () => {
   assert.equal(extractContactPhone({}), '');
   assert.equal(extractContactPhone({ phone: '12345' }), '');
+});
+
+test('extracts OrdenId from the configured custom slot, including custom_10', () => {
+  const config = { custom_10_campo: 'ORDEN' };
+  assert.equal(
+    extractOrderId({ customFields: { custom_10: '123456' } }, config),
+    123456
+  );
+  assert.equal(
+    extractOrderId({ custom_10: '789' }, { custom_3_campo: 'ORDEN_ID', custom_10_campo: 'LINK' }),
+    null
+  );
+  assert.equal(
+    extractOrderId({ custom_3: '789', custom_10: '999' }, { custom_3_campo: 'orden_id' }),
+    789
+  );
+});
+
+test('rejects partial, zero, unsafe, and nonnumeric OrdenId values', () => {
+  for (const value of ['123abc', '0', '-1', '1.5', '9007199254740992']) {
+    assert.equal(extractOrderId({ custom_10: value }, {}), null);
+  }
+});
+
+test('uses the new template layout for ticket, token, PIN, and stored custom fields', () => {
+  const item = {
+    name: 'Cliente',
+    custom_5: 'TCK-123',
+    custom_7: '4321',
+    custom_8: 'x'.repeat(24),
+    custom_9: 'https://example.test/seguimiento/secret',
+    custom_10: '123456',
+    phone: '987654321'
+  };
+  const config = {
+    custom_5_campo: 'TICKET',
+    custom_7_campo: 'PIN',
+    custom_8_campo: 'TOKEN',
+    custom_9_campo: 'LINK',
+    custom_10_campo: 'ORDEN'
+  };
+
+  assert.equal(extractTicket(item, config), 'TCK-123');
+  assert.equal(resolveConfiguredCustomValue(item, config, ['TOKEN'], 8), 'x'.repeat(24));
+  assert.deepEqual(extractTemplateFields(item), {
+    custom_5: 'TCK-123',
+    custom_7: '4321',
+    custom_8: 'x'.repeat(24),
+    custom_9: 'https://example.test/seguimiento/secret',
+    custom_10: '123456'
+  });
 });
 
 test('resolves credentials by template and service, including shared template IDs', () => {

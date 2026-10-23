@@ -15,6 +15,90 @@ function extractContactPhone(item) {
   return digits.length >= 9 ? digits.slice(-9) : '';
 }
 
+function extractTemplateFields(item) {
+  const source = item.customFields && typeof item.customFields === 'object'
+    ? item.customFields
+    : item;
+  const fields = {};
+
+  for (let index = 1; index <= 10; index++) {
+    const key = `custom_${index}`;
+    if (source[key] !== undefined && source[key] !== null) {
+      fields[key] = source[key];
+    }
+  }
+
+  return fields;
+}
+
+function normalizeMapping(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+function resolveConfiguredCustomValue(item, config, aliases, fallbackIndex) {
+  const fields = extractTemplateFields(item);
+  const normalizedAliases = new Set(aliases.map(normalizeMapping));
+
+  for (let index = 1; index <= 10; index++) {
+    const mapping = config?.[`custom_${index}_campo`];
+    if (normalizedAliases.has(normalizeMapping(mapping))) {
+      const value = fields[`custom_${index}`];
+      if (value !== undefined && value !== null && String(value).trim() !== '') {
+        return value;
+      }
+      return null;
+    }
+  }
+
+  const fallbackMapping = normalizeMapping(config?.[`custom_${fallbackIndex}_campo`]);
+  if (fallbackMapping && !normalizedAliases.has(fallbackMapping)) return null;
+
+  const fallback = fields[`custom_${fallbackIndex}`];
+  return fallback !== undefined && fallback !== null && String(fallback).trim() !== ''
+    ? fallback
+    : null;
+}
+
+function extractOrderId(item, config) {
+  const rawOrderId = resolveConfiguredCustomValue(
+    item,
+    config,
+    ['ORDEN', 'ORDENID', 'ORDEN_ID'],
+    10
+  );
+  if (rawOrderId === null) return null;
+
+  const normalized = String(rawOrderId).trim();
+  if (!/^[1-9]\d*$/.test(normalized)) return null;
+
+  const orderId = Number(normalized);
+  return Number.isSafeInteger(orderId) ? orderId : null;
+}
+
+function extractTicket(item, config) {
+  const configuredTicket = resolveConfiguredCustomValue(
+    item,
+    config,
+    ['TICKET', 'DOCUMENTO', 'CODISEGUI'],
+    5
+  );
+  if (configuredTicket !== null) return String(configuredTicket).trim();
+
+  const fields = extractTemplateFields(item);
+  const legacyTicket = fields.custom_1 || fields.custom_6;
+  if (!legacyTicket) return null;
+
+  const ticket = String(legacyTicket).trim();
+  if (!ticket || /^https?:\/\//i.test(ticket) || /^(internet|paquete)/i.test(ticket)) {
+    return null;
+  }
+  return ticket;
+}
+
 function resolveTemplateConfig(candidate, configs) {
   const matchingConfigs = configs.filter(config =>
     String(config.template_id) === String(candidate.template_id)
@@ -38,5 +122,9 @@ function resolveTemplateConfig(candidate, configs) {
 
 module.exports = {
   extractContactPhone,
+  extractOrderId,
+  extractTemplateFields,
+  extractTicket,
+  resolveConfiguredCustomValue,
   resolveTemplateConfig
 };

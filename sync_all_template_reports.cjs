@@ -1,6 +1,12 @@
 require('dotenv').config();
 const { pool, getControlTables } = require('./mantra_service.cjs');
-const { extractContactPhone } = require('./scripts/mantra_report_helpers.cjs');
+const {
+  extractContactPhone,
+  extractOrderId,
+  extractTemplateFields,
+  extractTicket,
+  resolveConfiguredCustomValue
+} = require('./scripts/mantra_report_helpers.cjs');
 const { getDateInTimeZone } = require('./scripts/date_utils.cjs');
 
 const URL_TEMPLATE_REPORT = "https://wbpback2pro2.mantra.chat/report/template/messages/ext";
@@ -27,34 +33,22 @@ async function sleep(ms) {
 }
 
 function resolveCodigoPedido(item, cfg) {
-  // Aplanar el objeto si viene en la nueva estructura anidada customFields
   const fields = item.customFields || item;
+  const ticket = extractTicket(item, cfg);
+  if (ticket && !/^https?:\/\//i.test(ticket)) return ticket;
 
-  // 1. Buscar en las columnas configuradas si alguna es TICKET o DOCUMENTO
-  for (let i = 1; i <= 20; i++) {
-    const colName = `custom_${i}_campo`;
-    if (cfg && (cfg[colName] === 'TICKET' || cfg[colName] === 'DOCUMENTO' || cfg[colName] === 'ORDENID' || cfg[colName] === 'ORDEN_ID' || cfg[colName] === 'ORDEN')) {
-      const val = fields[`custom_${i}`];
-      if (val && typeof val === 'string' && val.trim() !== '' && !val.startsWith('http')) {
-        return val.trim();
-      }
+  const legacyValue = fields.custom_6 || fields.custom_1;
+  if (legacyValue) {
+    const value = String(legacyValue).trim();
+    if (
+      value
+      && !/^https?:\/\//i.test(value)
+      && !/^(internet|paquete|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)/i.test(value)
+    ) {
+      return value;
     }
   }
-
-  // 2. Si custom_10 o custom_6 es ticket / documento y no es link ni plan
-  if (fields.custom_10 && !String(fields.custom_10).startsWith('http') && !/^(internet|paquete)/i.test(fields.custom_10)) {
-    return String(fields.custom_10).trim();
-  }
-  if (fields.custom_6 && !String(fields.custom_6).startsWith('http') && !/^(internet|paquete)/i.test(fields.custom_6)) {
-    return String(fields.custom_6).trim();
-  }
-
-  // 3. Si custom_1 no es plan ni fecha, usar custom_1
-  if (fields.custom_1 && !/^(internet|paquete|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)/i.test(fields.custom_1)) {
-    return String(fields.custom_1).trim();
-  }
-
-  return fields.custom_1 ? String(fields.custom_1).trim() : (item.contactId || item._id || null);
+  return item.contactId || item._id || null;
 }
 
 /**
@@ -75,6 +69,7 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
   let page = 1;
   let totalInserted = 0;
   let skippedWithoutPhone = 0;
+  let insertedWithoutOrderId = 0;
   let hasMore = true;
 
   while (hasMore) {
@@ -115,69 +110,32 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
       console.log(`   Página ${page}/${json.totalPages || 1}: Procesando ${rows.length} registros (Total general Mantra: ${json.total})...`);
 
       for (const item of rows) {
-        // Soporte híbrido para nueva estructura anidada o antigua plana
         const fields = item.customFields || item;
+        const itemOrdenId = extractOrderId(item, cfg);
         const cleanPhone = extractContactPhone(item);
         if (!cleanPhone) {
           skippedWithoutPhone++;
           continue;
         }
+        if (itemOrdenId === null) insertedWithoutOrderId++;
         const name = item.contactName || item.name || null;
 
-        let itemOrdenId = null;
-        for (let i = 1; i <= 20; i++) {
-          const colName = `custom_${i}_campo`;
-          if (cfg && (cfg[colName] === 'ORDEN' || cfg[colName] === 'ORDENID' || cfg[colName] === 'ORDEN_ID') && fields[`custom_${i}`]) {
-            const num = parseInt(String(fields[`custom_${i}`]).trim(), 10);
-            if (!isNaN(num) && num > 0) { itemOrdenId = num; break; }
-          }
-        }
-        if (!itemOrdenId && fields.custom_20) {
-          const num = parseInt(String(fields.custom_20).trim(), 10);
-          if (!isNaN(num) && num > 0) { itemOrdenId = num; }
-        }
-        if (!itemOrdenId && fields.custom_15) {
-          const num = parseInt(String(fields.custom_15).trim(), 10);
-          if (!isNaN(num) && num > 0 && !String(fields.custom_15).startsWith('VT') && !String(fields.custom_15).startsWith('GAR')) { 
-            itemOrdenId = num; 
-          }
-        }
-
-        let itemToken = null;
-        for (let i = 1; i <= 20; i++) {
-          const colName = `custom_${i}_campo`;
-          if (cfg && cfg[colName] === 'TOKEN' && fields[`custom_${i}`]) {
-            const val = String(fields[`custom_${i}`]).trim();
-            if (val.length >= 20) { itemToken = val; break; }
-          }
-        }
-        if (!itemToken && fields.custom_18 && String(fields.custom_18).trim().length >= 20) {
-          itemToken = String(fields.custom_18).trim();
-        }
+        let itemToken = resolveConfiguredCustomValue(item, cfg, ['TOKEN'], 8);
+        itemToken = itemToken ? String(itemToken).trim() : null;
+        if (itemToken && itemToken.length < 20) itemToken = null;
         if (!itemToken) {
-          const custom9Val = fields.custom_9 ? String(fields.custom_9).trim() : null;
-          const custom10Val = fields.custom_10 ? String(fields.custom_10).trim() : null;
-          itemToken = (custom9Val && custom9Val.length >= 20) 
-            ? custom9Val 
-            : (custom10Val && custom10Val.includes('/seguimiento/') ? custom10Val.split('/seguimiento/').pop().trim() : null);
+          const trackingLink = resolveConfiguredCustomValue(item, cfg, ['LINK', 'URL'], 9);
+          const trackingMatch = String(trackingLink || '').match(/\/seguimiento\/([^/?#]+)/i);
+          if (trackingMatch) itemToken = trackingMatch[1];
         }
 
-        let itemPin = null;
-        for (let i = 1; i <= 20; i++) {
-          const colName = `custom_${i}_campo`;
-          if (cfg && (cfg[colName] === 'PIN' || cfg[colName] === 'PIN_TOKEN') && fields[`custom_${i}`]) {
-            const val = String(fields[`custom_${i}`]).trim();
-            if (val) { itemPin = val; break; }
-          }
-        }
-        if (!itemPin && fields.custom_17) {
-          itemPin = String(fields.custom_17).trim();
-        }
-        if (!itemPin && fields.custom_5 && String(fields.custom_5).trim().length <= 6 && /^\d+$/.test(String(fields.custom_5).trim())) {
-          itemPin = String(fields.custom_5).trim();
-        }
+        const rawPin = resolveConfiguredCustomValue(item, cfg, ['PIN', 'PINTOKEN'], 7);
+        const itemPin = rawPin === null ? null : String(rawPin).trim() || null;
 
-        const rawCustomFieldsJson = fields ? JSON.stringify(fields) : null;
+        const customFields = extractTemplateFields(item);
+        const rawCustomFieldsJson = Object.keys(customFields).length > 0
+          ? JSON.stringify(customFields)
+          : null;
 
         await pool.query(`
           INSERT INTO REPORTE_PLANTILLAS_MANTRA (
@@ -251,8 +209,11 @@ async function syncTemplateReport(cfg, fromDate, toDate) {
   if (skippedWithoutPhone > 0) {
     console.warn(`⚠️ [${nombre_alias}] Se omitieron ${skippedWithoutPhone} registros sin un teléfono válido.`);
   }
+  if (insertedWithoutOrderId > 0) {
+    console.warn(`⚠️ [${nombre_alias}] ${insertedWithoutOrderId} registros guardados llegaron sin un OrdenId numérico válido.`);
+  }
   console.log(`✅ [${nombre_alias}] Finalizado: ${totalInserted} registros sincronizados en MySQL.`);
-  return { alias: nombre_alias, totalInserted, skippedWithoutPhone };
+  return { alias: nombre_alias, totalInserted, skippedWithoutPhone, insertedWithoutOrderId };
 }
 
 /**
@@ -296,6 +257,13 @@ async function syncAllTemplates(fromDate, toDate) {
   );
   if (skippedWithoutPhone > 0) {
     console.warn(`⚠️ Se omitieron ${skippedWithoutPhone} registros sin teléfono válido; revisar el formato devuelto por Mantra.`);
+  }
+  const insertedWithoutOrderId = results.reduce(
+    (total, result) => total + (result.insertedWithoutOrderId || 0),
+    0
+  );
+  if (insertedWithoutOrderId > 0) {
+    console.warn(`⚠️ ${insertedWithoutOrderId} registros guardados llegaron sin OrdenId numérico válido; revisar mapeo custom_10 y respuesta de Mantra.`);
   }
   if (errors.length > 0) {
     throw new Error(`Falló la sincronización de ${errors.length} de ${activeConfigs.length} plantillas.`);
