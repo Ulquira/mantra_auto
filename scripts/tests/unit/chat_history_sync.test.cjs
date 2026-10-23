@@ -49,6 +49,20 @@ test('extracts OrdenId from the configured custom slot, including custom_10', ()
   );
 });
 
+test('extracts OrdenId from custom_11 after moving the configured mapping', () => {
+  const config = { custom_10_campo: 'LINK', custom_11_campo: 'ORDEN' };
+  const item = {
+    custom_10: 'https://example.test/seguimiento/token',
+    custom_11: '3545279'
+  };
+
+  assert.equal(extractOrderId(item, config), 3545279);
+  assert.deepEqual(extractTemplateFields(item), {
+    custom_10: 'https://example.test/seguimiento/token',
+    custom_11: '3545279'
+  });
+});
+
 test('rejects partial, zero, unsafe, and nonnumeric OrdenId values', () => {
   for (const value of ['123abc', '0', '-1', '1.5', '9007199254740992']) {
     assert.equal(extractOrderId({ custom_10: value }, {}), null);
@@ -63,6 +77,7 @@ test('uses the new template layout for ticket, token, PIN, and stored custom fie
     custom_8: 'x'.repeat(24),
     custom_9: 'https://example.test/seguimiento/secret',
     custom_10: '123456',
+    custom_11: '789012',
     phone: '987654321'
   };
   const config = {
@@ -80,7 +95,8 @@ test('uses the new template layout for ticket, token, PIN, and stored custom fie
     custom_7: '4321',
     custom_8: 'x'.repeat(24),
     custom_9: 'https://example.test/seguimiento/secret',
-    custom_10: '123456'
+    custom_10: '123456',
+    custom_11: '789012'
   });
 });
 

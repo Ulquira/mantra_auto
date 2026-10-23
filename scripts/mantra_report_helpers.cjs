@@ -21,7 +21,7 @@ function extractTemplateFields(item) {
     : item;
   const fields = {};
 
-  for (let index = 1; index <= 10; index++) {
+  for (let index = 1; index <= 20; index++) {
     const key = `custom_${index}`;
     if (source[key] !== undefined && source[key] !== null) {
       fields[key] = source[key];
@@ -43,7 +43,7 @@ function resolveConfiguredCustomValue(item, config, aliases, fallbackIndex) {
   const fields = extractTemplateFields(item);
   const normalizedAliases = new Set(aliases.map(normalizeMapping));
 
-  for (let index = 1; index <= 10; index++) {
+  for (let index = 1; index <= 20; index++) {
     const mapping = config?.[`custom_${index}_campo`];
     if (normalizedAliases.has(normalizeMapping(mapping))) {
       const value = fields[`custom_${index}`];
@@ -68,7 +68,7 @@ function extractOrderId(item, config) {
     item,
     config,
     ['ORDEN', 'ORDENID', 'ORDEN_ID'],
-    10
+    11
   );
   if (rawOrderId === null) return null;
 
