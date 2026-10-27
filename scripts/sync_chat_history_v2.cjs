@@ -89,7 +89,7 @@ async function syncSingleChat(candidate, configs) {
   const totalMensajes = Number.isFinite(Number(historyData.total))
     ? Number(historyData.total)
     : metrics.messages.length;
-  asesorAsignado = metrics.asesorAsignado || asesorAsignado;
+  asesorAsignado = metrics.asesorAsignado || asesorAsignado || candidate.asesor_fallback || null;
 
   const recentMessages = metrics.messages.slice(0, 15).map((message, index) => ({
     orden: index + 1,
