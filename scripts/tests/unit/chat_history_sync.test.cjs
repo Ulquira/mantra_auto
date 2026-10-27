@@ -9,6 +9,7 @@ const {
   extractOrderId,
   extractTemplateFields,
   extractTicket,
+  isValidTicket,
   resolveConfiguredCustomValue,
   resolveTemplateConfig
 } = require('../../mantra_report_helpers.cjs');
@@ -184,4 +185,32 @@ test('calculates the SLA from a button response when chat history is empty', () 
   assert.equal(metrics.quienTienePalabra, 'CLIENTE');
   assert.equal(metrics.tiempoEsperaMinutos, 20);
   assert.equal(metrics.semaforo, 'ROJO');
+});
+
+test('validates ticket format discarding non-ticket values such as city or customer names', () => {
+  assert.equal(isValidTicket('22913783'), true);
+  assert.equal(isValidTicket('TCK-123'), true);
+  assert.equal(isValidTicket('VTEXT-49055290'), true);
+  assert.equal(isValidTicket('AT-49053494'), true);
+
+  assert.equal(isValidTicket('Lima'), false);
+  assert.equal(isValidTicket('Callao'), false);
+  assert.equal(isValidTicket('Chorrillos'), false);
+  assert.equal(isValidTicket('Ate Vitarte'), false);
+  assert.equal(isValidTicket('MERY'), false);
+  assert.equal(isValidTicket('Adelanto de Programación'), false);
+  assert.equal(isValidTicket('08:00 - 12:00'), false);
+  assert.equal(isValidTicket('28 de OCTUBRE'), false);
+});
+
+test('extractTicket rejects city name when custom_5 is mapped to ticket but contains location', () => {
+  const item = {
+    custom_5: 'Lima',
+    custom_11: '3554963'
+  };
+  const config = {
+    custom_5_campo: 'TICKET',
+    custom_11_campo: 'ORDEN'
+  };
+  assert.equal(extractTicket(item, config), null);
 });

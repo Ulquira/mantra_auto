@@ -79,6 +79,18 @@ function extractOrderId(item, config) {
   return Number.isSafeInteger(orderId) ? orderId : null;
 }
 
+function isValidTicket(val) {
+  if (!val || typeof val !== 'string') return false;
+  const s = val.trim();
+  if (!s || s.length < 3) return false;
+  if (/^https?:\/\//i.test(s)) return false;
+  if (/^(internet|paquete|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)/i.test(s)) return false;
+  if (/^[a-záéíóúñ\s.,;:'"\/\\-]+$/i.test(s) && !/\d/.test(s)) return false;
+  if (/^\d{1,2}\s+de\s+[a-z]+/i.test(s) || /^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  if (/^\d{1,2}:\d{2}/.test(s)) return false;
+  return /\d/.test(s);
+}
+
 function extractTicket(item, config) {
   const configuredTicket = resolveConfiguredCustomValue(
     item,
@@ -86,14 +98,16 @@ function extractTicket(item, config) {
     ['TICKET', 'DOCUMENTO', 'CODISEGUI'],
     5
   );
-  if (configuredTicket !== null) return String(configuredTicket).trim();
+  if (configuredTicket !== null && isValidTicket(String(configuredTicket))) {
+    return String(configuredTicket).trim();
+  }
 
   const fields = extractTemplateFields(item);
   const legacyTicket = fields.custom_1 || fields.custom_6;
   if (!legacyTicket) return null;
 
   const ticket = String(legacyTicket).trim();
-  if (!ticket || /^https?:\/\//i.test(ticket) || /^(internet|paquete)/i.test(ticket)) {
+  if (!isValidTicket(ticket)) {
     return null;
   }
   return ticket;
@@ -125,6 +139,7 @@ module.exports = {
   extractOrderId,
   extractTemplateFields,
   extractTicket,
+  isValidTicket,
   resolveConfiguredCustomValue,
   resolveTemplateConfig
 };

@@ -5,6 +5,7 @@ const {
   extractOrderId,
   extractTemplateFields,
   extractTicket,
+  isValidTicket,
   resolveConfiguredCustomValue
 } = require('./scripts/mantra_report_helpers.cjs');
 const { getDateInTimeZone } = require('./scripts/date_utils.cjs');
@@ -35,16 +36,12 @@ async function sleep(ms) {
 function resolveCodigoPedido(item, cfg) {
   const fields = item.customFields || item;
   const ticket = extractTicket(item, cfg);
-  if (ticket && !/^https?:\/\//i.test(ticket)) return ticket;
+  if (ticket && isValidTicket(ticket)) return ticket;
 
   const legacyValue = fields.custom_6 || fields.custom_1;
   if (legacyValue) {
     const value = String(legacyValue).trim();
-    if (
-      value
-      && !/^https?:\/\//i.test(value)
-      && !/^(internet|paquete|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)/i.test(value)
-    ) {
+    if (isValidTicket(value)) {
       return value;
     }
   }
