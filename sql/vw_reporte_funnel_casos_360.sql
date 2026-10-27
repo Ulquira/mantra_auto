@@ -26,15 +26,25 @@ SELECT
   t.token AS token_tracking,
   CONCAT('https://enruta.win.pe/seguimiento/', t.token) AS link_tracking,
   
-  -- 1. Notificación WhatsApp (Consolidado: Log de despacho en vivo + Reporte asíncrono Mantra)
+  -- 1. Notificación WhatsApp (Consolidado: Log en vivo OrdenId/Ticket + Reporte Mantra)
   CASE 
-    WHEN l.OrdenId IS NOT NULL OR m_ord.orden_id IS NOT NULL OR m_tok.token IS NOT NULL THEN 'SI' 
+    WHEN l.OrdenId IS NOT NULL 
+      OR l_ticket.CodiSegui IS NOT NULL 
+      OR m_ord.orden_id IS NOT NULL 
+      OR m_cod.codigo_pedido IS NOT NULL 
+      OR m_tok.token IS NOT NULL 
+    THEN 'SI' 
     ELSE 'NO' 
   END AS se_envio_wsp,
-  COALESCE(m_ord.fecha_envio_wsp, m_tok.fecha_envio_wsp, l.fecha_envio_wsp) AS fecha_envio_wsp,
-  COALESCE(m_ord.estado_mensaje_wsp, m_tok.estado_mensaje_wsp, IF(l.OrdenId IS NOT NULL, 'SENT', 'NO ENVIADO')) AS estado_wsp,
-  COALESCE(m_ord.plantilla_wsp, m_tok.plantilla_wsp, l.estado_notificado) AS plantilla_wsp,
-  COALESCE(m_ord.respuesta_boton_wsp, m_tok.respuesta_boton_wsp) AS respuesta_boton_wsp,
+  COALESCE(m_ord.fecha_envio_wsp, m_cod.fecha_envio_wsp, m_tok.fecha_envio_wsp, l.fecha_envio_wsp, l_ticket.fecha_envio_wsp) AS fecha_envio_wsp,
+  COALESCE(
+    m_ord.estado_mensaje_wsp, 
+    m_cod.estado_mensaje_wsp, 
+    m_tok.estado_mensaje_wsp, 
+    IF(l.OrdenId IS NOT NULL OR l_ticket.CodiSegui IS NOT NULL, 'SENT', 'NO ENVIADO')
+  ) AS estado_wsp,
+  COALESCE(m_ord.plantilla_wsp, m_cod.plantilla_wsp, m_tok.plantilla_wsp, l.estado_notificado, l_ticket.estado_notificado) AS plantilla_wsp,
+  COALESCE(m_ord.respuesta_boton_wsp, m_cod.respuesta_boton_wsp, m_tok.respuesta_boton_wsp) AS respuesta_boton_wsp,
   
   -- 2. Interacciones en Plataforma Web Tracking (logs_traking)
   CASE 
@@ -83,7 +93,7 @@ FROM vw_winordetraba t
 -- Cruce con tiposervicio para segmentación operativa (Instalación, Averías, Provincia, etc.)
 LEFT JOIN tiposervicio ts ON t.Producto = ts.Servicio
 
--- Log transaccional directo de envíos en tiempo real (LOG_NOTIFICACIONES_WSP)
+-- Log transaccional directo de envíos en vivo: Cruce 1 por OrdenId
 LEFT JOIN (
   SELECT 
     OrdenId,
@@ -94,7 +104,25 @@ LEFT JOIN (
   GROUP BY OrdenId
 ) l ON t.OrdenId = l.OrdenId
 
--- Subconsulta Mantra indexada por orden_id (para estados leídos/entregados y botones)
+-- Log transaccional directo de envíos en vivo: Cruce 2 Fallback por CodiSegui (Ticket) en misma fecha de gestión
+LEFT JOIN (
+  SELECT 
+    CodiSegui,
+    CAST(fecha_envio AS DATE) AS fecha_envio_dia,
+    MAX(fecha_envio) AS fecha_envio_wsp,
+    SUBSTRING_INDEX(GROUP_CONCAT(EstadoNotificado ORDER BY fecha_envio DESC SEPARATOR '|'), '|', 1) AS estado_notificado
+  FROM LOG_NOTIFICACIONES_WSP
+  WHERE EnviadoExitosamente = 1 AND CodiSegui IS NOT NULL AND CodiSegui <> ''
+  GROUP BY CodiSegui, CAST(fecha_envio AS DATE)
+) l_ticket ON (
+  l.OrdenId IS NULL 
+  AND t.CodiSegui IS NOT NULL 
+  AND t.CodiSegui <> '' 
+  AND t.CodiSegui = l_ticket.CodiSegui 
+  AND CAST(t.`F.Soli` AS DATE) = l_ticket.fecha_envio_dia
+)
+
+-- Subconsulta Mantra indexada por orden_id
 LEFT JOIN (
   SELECT 
     orden_id,
@@ -107,6 +135,26 @@ LEFT JOIN (
   GROUP BY orden_id
 ) m_ord ON t.OrdenId = m_ord.orden_id
 
+-- Subconsulta Mantra fallback por CodiSegui (Ticket / codigo_pedido) en misma fecha de gestión
+LEFT JOIN (
+  SELECT 
+    codigo_pedido,
+    CAST(CONVERT_TZ(fecha_envio, '+00:00', '-05:00') AS DATE) AS fecha_envio_dia,
+    MAX(CONVERT_TZ(fecha_envio, '+00:00', '-05:00')) AS fecha_envio_wsp,
+    SUBSTRING_INDEX(GROUP_CONCAT(estado_mensaje ORDER BY fecha_envio DESC SEPARATOR '|'), '|', 1) AS estado_mensaje_wsp,
+    SUBSTRING_INDEX(GROUP_CONCAT(nombre_plantilla_alias ORDER BY fecha_envio DESC SEPARATOR '|'), '|', 1) AS plantilla_wsp,
+    SUBSTRING_INDEX(GROUP_CONCAT(respuesta_boton ORDER BY fecha_respuesta_boton DESC SEPARATOR '|'), '|', 1) AS respuesta_boton_wsp
+  FROM REPORTE_PLANTILLAS_MANTRA
+  WHERE codigo_pedido IS NOT NULL AND codigo_pedido <> ''
+  GROUP BY codigo_pedido, CAST(CONVERT_TZ(fecha_envio, '+00:00', '-05:00') AS DATE)
+) m_cod ON (
+  m_ord.orden_id IS NULL 
+  AND t.CodiSegui IS NOT NULL 
+  AND t.CodiSegui <> '' 
+  AND t.CodiSegui = m_cod.codigo_pedido 
+  AND CAST(t.`F.Soli` AS DATE) = m_cod.fecha_envio_dia
+)
+
 -- Subconsulta Mantra fallback por token
 LEFT JOIN (
   SELECT 
@@ -118,7 +166,7 @@ LEFT JOIN (
   FROM REPORTE_PLANTILLAS_MANTRA
   WHERE orden_id IS NULL AND token IS NOT NULL AND token <> ''
   GROUP BY token
-) m_tok ON (m_ord.orden_id IS NULL AND t.token = m_tok.token AND t.token IS NOT NULL AND t.token <> '')
+) m_tok ON (m_ord.orden_id IS NULL AND m_cod.codigo_pedido IS NULL AND t.token = m_tok.token AND t.token IS NOT NULL AND t.token <> '')
 
 -- Subconsulta Logs Tracking indexada por OrdenId
 LEFT JOIN (
